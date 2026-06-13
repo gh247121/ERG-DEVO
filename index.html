@@ -636,7 +636,7 @@ const trialEmail = document.getElementById('trialEmailInput')?.value.trim();
 if (trialEmail) {
     const startDate = new Date().toLocaleDateString('ar-SA');
     const expiryDateStr = new Date(Date.now() + 3*24*60*60*1000).toLocaleDateString('ar-SA');
-    sendEmail('erg_trial', trialEmail, name, {
+    sendEmail('template_6stfptk', trialEmail, name, {
         start_date: startDate,
         expiry_date: expiryDateStr
     });
@@ -3429,7 +3429,7 @@ window.approveRequest = async (reqId, name, phone) => {
                 const reqSnap2 = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pending_requests', reqId));
                 const reqEmail = reqSnap2.exists() ? reqSnap2.data().email : '';
                 if (reqEmail) {
-                    const emailSent = await sendEmail('erg_activation', reqEmail, name, {
+                    const emailSent = await sendEmail('template_mf871pf', reqEmail, name, {
                         activation_code: newKey
                     });
                     if (emailSent) {
