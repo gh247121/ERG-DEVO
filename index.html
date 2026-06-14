@@ -3441,6 +3441,21 @@ window.approveRequest = async (reqId, name, phone) => {
                     { status: 'Approved', approvedAt: Date.now(), assignedKey: newKey }
                 );
 
+                // حفظ المشترك الجديد في Firestore
+                await setDoc(
+                    doc(db, 'artifacts', appId, 'public', 'data', 'subscribers', newKey),
+                    {
+                        ownerName: name,
+                        phone: phone,
+                        subKey: newKey,
+                        isPaid: true,
+                        status: 'active',
+                        maxMembers: 5,
+                        createdAt: Date.now(),
+                        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                    }
+                );
+
                 // إرسال الكود عبر البريد الإلكتروني
                 const reqSnap2 = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pending_requests', reqId));
                 const reqEmail = reqSnap2.exists() ? reqSnap2.data().email : '';
