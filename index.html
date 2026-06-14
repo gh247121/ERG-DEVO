@@ -183,7 +183,11 @@ const subEmail = document.getElementById('subscribe_email_input')?.value.trim() 
             timestamp: Date.now()
         });
 
-        // تم إرسال الطلب للمدير عبر Firestore فقط
+        // إشعار المدير بالبريد
+        const notifyTime = new Date().toLocaleString('ar-SA');
+        window.sendEmail('template_mf871pf', 'gh247121@gmail.com', 'المدير', {
+            activation_code: `طلب اشتراك جديد بانتظار مراجعتك\n\nالاسم: ${name}\nالهاتف: ${phone}\nطريقة الدفع: ${payMethod}\nمرجع التحويل: ${transferRef}\nالوقت: ${notifyTime}`
+        });
 
         window.showNotif("تم رفع الطلب بنجاح! سيتم التواصل معك قريباً", "success");
         window.closeWin('winPayment');
@@ -232,7 +236,7 @@ window.refreshOrderStatus = async (reqId) => {
 
         if (data.status === 'Approved') {
             if (statusEl) {
-                statusEl.textContent = '✅ تمت الموافقة — تحقق من بريدك الإلكتروني للحصول على الكود';
+                statusEl.innerHTML = '✅ تمت الموافقة — تحقق من بريدك الإلكتروني<br><span style="color:#f59e0b;font-size:11px;">⚠️ إذا لم تجد الرسالة تحقق من مجلد Spam وضع المرسل في القائمة البيضاء</span>';
                 statusEl.className = 'text-emerald-400 font-black text-sm text-center';
             }
             if (step2El) step2El.classList.replace('border-amber-500/30','border-emerald-500/30');
@@ -642,7 +646,11 @@ if (trialEmail) {
     });
     window.showNotif('📧 تم إرسال بريد التأكيد', 'success');
 }
-window.launchOS('leader', phoneHash, `🎯 مرحباً ${name}! تجربتك المجانية نشطة لمدة 3 أيام`);
+// إشعار المدير بالتجربة المجانية
+        const trialNotifyTime = new Date().toLocaleString('ar-SA');
+        window.sendEmail('template_mf871pf', 'gh247121@gmail.com', 'المدير', {
+            activation_code: `تجربة مجانية جديدة\n\nالاسم: ${name}\nالهاتف: ${phone}\nالوقت: ${trialNotifyTime}`
+        });
 
     } catch(e) {
         console.error(e);
@@ -7491,6 +7499,7 @@ body.desktop-active {
                 <div>
                     <p class="text-slate-400 font-black text-sm">إرسال كود التفعيل</p>
                     <p class="text-slate-600 text-xs font-bold">سيُرسل كودك عبر البريد الإلكتروني فور الاعتماد</p>
+                    <p class="text-amber-500/70 text-xs mt-1">⚠️ تحقق من مجلد Spam إذا لم تجد الرسالة</p>
                 </div>
             </div>
 
