@@ -183,6 +183,14 @@ const subEmail = document.getElementById('subscribe_email_input')?.value.trim() 
             timestamp: Date.now()
         });
 
+// إشعار المشترك باستلام طلبه
+        if (subEmail) {
+            window.sendEmail('template_6stfptk', subEmail, name, {
+                start_date: new Date().toLocaleString('ar-SA'),
+                expiry_date: 'سيتم إشعارك فور الاعتماد'
+            });
+        }
+
         // إشعار المدير بالبريد
         const notifyTime = new Date().toLocaleString('ar-SA');
         window.sendEmail('template_mf871pf', 'gh247121@gmail.com', 'المدير', {
