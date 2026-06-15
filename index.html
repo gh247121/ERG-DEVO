@@ -156,6 +156,11 @@ window.startPublicPayment = () => {
     if (!name || !phone) return window.showNotif("يرجى إدخال الاسم ورقم الهاتف بالكامل", "error");
 
     window.isPublicSubscription = true;
+    // تحديث السعر في شاشة الدفع حسب الباقة المختارة
+    const selectedPlan = document.getElementById('subscribe_plan_select')?.value || '5';
+    const planPricesMap = { '5': 200, '10': 350, '20': 500 };
+    const priceDisplay = document.getElementById('paymentPriceDisplay');
+    if (priceDisplay) priceDisplay.textContent = planPricesMap[selectedPlan] || 200;
     window.openWin('winPayment');
 };
 
@@ -227,7 +232,7 @@ window.showOrderTracking = (reqId, name, phone, transferRef, payMethod, plan, pr
     document.getElementById('track_method').textContent = payMethod;
     document.getElementById('track_time').textContent = new Date().toLocaleString('ar-SA');
     const planEl = document.getElementById('track_plan');
-    if (planEl) planEl.textContent = `باقة ${plan || 5} أعضاء — ${price || 200} دينار`;
+    if (planEl) planEl.textContent = `باقة ${plan || 5} أعضاء — ${price || 200} $`;
     document.getElementById('track_status_label').textContent = '⏳ جاري مراجعة التحويل...';
     document.getElementById('track_status_label').className = 'text-amber-400 font-black text-sm text-center';
 
@@ -1007,7 +1012,7 @@ window.loadFinancePending = async () => {
                 <div class="text-right">
                     <p class="text-white text-xs font-black">${r.name}</p>
                     <p class="text-slate-500 text-[10px]">${r.phone} · ${r.payMethod} · ${r.transferRef}</p>
-                    <p class="text-amber-400 text-[10px] font-black">📦 باقة ${r.plan || 5} أعضاء — ${r.price || 200} دينار</p>
+                    <p class="text-amber-400 text-[10px] font-black">📦 باقة ${r.plan || 5} أعضاء — ${r.price || 200} $</p>
                     <p class="text-slate-600 text-[10px]">${new Date(r.timestamp).toLocaleString('ar-SA')}</p>
                 </div>
                 <div class="flex gap-2">
@@ -1178,7 +1183,7 @@ window.updatePlanPrice = () => {
     const note = document.getElementById('planPriceNote');
     if (!sel || !note) return;
     const prices = { '5': 200, '10': 350, '20': 500 };
-    note.textContent = `💰 المبلغ المطلوب: ${prices[sel.value]} دينار أردني`;
+    note.textContent = `💰 المبلغ المطلوب: ${prices[sel.value]} $`;
 };
 
 
@@ -1816,8 +1821,10 @@ window.clearAllReports = () => {
 // --- محرك تشغيل النظام والواجهة (محدث بقوة الإظهار) ---
 window.launchOS = (role, key, msg) => {
     // تحديد نوع الجلسة
-    window.isTrial = false;
-    window.trialDaysLeft = 0;
+    // تحديد نوع الجلسة
+    const _keepTrial = window.isTrial === true;
+    window.isTrial = _keepTrial;
+    if (!window.trialDaysLeft) window.trialDaysLeft = 0;
 
 // فحص انتهاء صلاحية الاشتراك
     if (role === 'leader') {
@@ -6407,11 +6414,11 @@ body.desktop-active {
 <select id="subscribe_plan_select" onchange="window.updatePlanPrice()"
             class="w-full bg-black/60 border border-white/10 p-5 rounded-[2rem] text-right text-white focus:border-emerald-500 outline-none text-lg italic shadow-inner transition-all"
             style="background:rgba(0,0,0,0.6);">
-            <option value="5">باقة 5 أعضاء — 200 دينار/سنة</option>
-            <option value="10">باقة 10 أعضاء — 350 دينار/سنة</option>
-            <option value="20">باقة 20 عضو — 500 دينار/سنة</option>
+            <option value="5">باقة 5 أعضاء — 200 $/سنة</option>
+            <option value="10">باقة 10 أعضاء — 350 $/سنة</option>
+            <option value="20">باقة 20 عضو — 500 $/سنة</option>
         </select>
-        <p id="planPriceNote" class="text-emerald-400 text-sm font-black text-right px-2">💰 المبلغ المطلوب: 200 دينار أردني</p>
+        <p id="planPriceNote" class="text-emerald-400 text-sm font-black text-right px-2">💰 المبلغ المطلوب: 200 $</p>
 
         <input type="email" id="subscribe_email_input" placeholder="📧 البريد الإلكتروني لاستلام كود الدخول" class="w-full bg-black/60 border border-white/10 p-5 rounded-[2rem] text-right text-white focus:border-emerald-500 outline-none text-lg italic shadow-inner transition-all" dir="rtl">
     </div>
@@ -7251,9 +7258,9 @@ body.desktop-active {
                             <select id="new_lmax"
                                 class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white text-xs outline-none focus:border-rose-500"
                                 style="background:#1a1a2e;">
-                                <option value="5">5 أعضاء — 200 د</option>
-                                <option value="10">10 أعضاء — 350 د</option>
-                                <option value="20">20 عضو — 500 د</option>
+                                <option value="5">5 أعضاء — 200 $</option>
+                                <option value="10">10 أعضاء — 350 $</option>
+                                <option value="20">20 عضو — 500 $</option>
                             </select>
                         </div>
                         <div>
@@ -7814,8 +7821,8 @@ body.desktop-active {
             <p class="text-slate-500 text-sm font-bold mt-2">اختر طريقة الدفع وأكمل الخطوات أدناه</p>
             <div class="mt-4 inline-flex items-center gap-3 bg-emerald-600/10 border border-emerald-500/20 px-6 py-3 rounded-2xl">
                 <span class="text-slate-400 font-bold text-sm">رسوم الترخيص السنوي:</span>
-                <span class="text-emerald-400 font-black text-2xl">200</span>
-                <span class="text-slate-400 font-bold text-sm">دولار / دينار</span>
+                <span id="paymentPriceDisplay" class="text-emerald-400 font-black text-2xl">200</span>
+                <span class="text-slate-400 font-bold text-sm">$ / سنوي</span>
             </div>
         </div>
 
