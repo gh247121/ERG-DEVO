@@ -164,6 +164,9 @@ window.startPublicPayment = () => {
     const planSummary = document.getElementById('payPlanSummary');
     const planLabels = { '5': 'باقة 5 أعضاء', '10': 'باقة 10 أعضاء', '20': 'باقة 20 عضو' };
     if (planSummary) planSummary.textContent = planLabels[selectedPlan] || 'باقة 5 أعضاء';
+    // تحديث رابط PayPal بالمبلغ الصحيح
+    const paypalLink = document.getElementById('paypalLink');
+    if (paypalLink) paypalLink.href = `https://paypal.me/momoom1994/${planPricesMap[selectedPlan] || 200}`;
     window.openWin('winPayment');
 };
 
@@ -7862,7 +7865,7 @@ body.desktop-active {
                         <p class="text-white font-black text-sm mb-1">Visa / PayPal</p>
                         <p class="text-slate-500 text-[10px] mb-3">الدفع عبر البوابة الآمنة</p>
                     </div>
-                    <a href="https://paypal.me/momoom1994/200" target="_blank"
+                    <a id="paypalLink" href="https://paypal.me/momoom1994/200" target="_blank"
                        onclick="document.getElementById('pay_method_select').value='PayPal/Card'"
                        class="w-full py-2 rounded-lg font-black text-white text-xs flex items-center justify-center gap-1 transition-all"
                        style="background:#2563eb;">
