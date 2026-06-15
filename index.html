@@ -204,7 +204,7 @@ const subPrice = planPrices[subPlan] || 200;
 
         window.showNotif("تم رفع الطلب بنجاح! سيتم التواصل معك قريباً", "success");
         window.closeWin('winPayment');
-        window.showOrderTracking(reqId, name, phone, transferRef, payMethod);
+        window.showOrderTracking(reqId, name, phone, transferRef, payMethod, subPlan, subPrice);
 
     } catch (e) {
         console.error("Payment Confirmation Error:", e);
@@ -216,7 +216,7 @@ const subPrice = planPrices[subPlan] || 200;
 
 
 // دالة فتح شاشة تتبع الطلب للمشترك
-window.showOrderTracking = (reqId, name, phone, transferRef, payMethod) => {
+window.showOrderTracking = (reqId, name, phone, transferRef, payMethod, plan, price) => {
     const win = document.getElementById('winOrderTracking');
     if (!win) return;
 
@@ -226,6 +226,8 @@ window.showOrderTracking = (reqId, name, phone, transferRef, payMethod) => {
     document.getElementById('track_ref').textContent = transferRef;
     document.getElementById('track_method').textContent = payMethod;
     document.getElementById('track_time').textContent = new Date().toLocaleString('ar-SA');
+    const planEl = document.getElementById('track_plan');
+    if (planEl) planEl.textContent = `باقة ${plan || 5} أعضاء — ${price || 200} دينار`;
     document.getElementById('track_status_label').textContent = '⏳ جاري مراجعة التحويل...';
     document.getElementById('track_status_label').className = 'text-amber-400 font-black text-sm text-center';
 
@@ -612,6 +614,8 @@ window.requestTrial = async () => {
             if (d.status === 'active' && d.expiryDate > Date.now()) {
                 const daysLeft = Math.ceil((d.expiryDate - Date.now()) / (1000*60*60*24));
                 window.activeKey = phoneHash;
+                window.isTrial = true;
+                window.trialDaysLeft = daysLeft;
                 return window.launchOS('leader', phoneHash, `مرحباً ${name} — تجربتك نشطة (${daysLeft} أيام متبقية)`);
             }
             if (d.status === 'rejected') {
@@ -942,9 +946,53 @@ window.financeTab = (tab) => {
     const activeBtn = document.getElementById(`ftab_${tab}`);
     if (activeBtn) { activeBtn.classList.add('text-emerald-400','border-emerald-500'); activeBtn.classList.remove('text-slate-500','border-transparent'); }
     if (tab === 'pending') window.loadFinancePending();
+    window.loadFinanceStats();
     if (tab === 'trials') window.loadTrials();
     if (tab === 'payments') window.loadPayments();
     if (tab === 'blocked') window.loadBlocked();
+};
+
+
+window.loadFinanceStats = async () => {
+    try {
+        const subsSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'subscribers'));
+        const subs = subsSnap.docs.map(d => d.data()).filter(s => s.isPaid);
+        const totalIncome = subs.reduce((acc, s) => {
+            const prices = { 5: 200, 10: 350, 20: 500 };
+            return acc + (prices[s.maxMembers] || 200);
+        }, 0);
+        const activeSubs = subs.filter(s => s.status === 'active').length;
+        const expiredSubs = subs.filter(s => s.status !== 'active').length;
+
+        const trialsSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'trials'));
+        const pendingTrials = trialsSnap.docs.filter(d => d.data().status === 'pending').length;
+        const activeTrials = trialsSnap.docs.filter(d => d.data().status === 'active').length;
+
+        const statsEl = document.getElementById('financeStats');
+        if (statsEl) statsEl.innerHTML = `
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <p class="text-emerald-400 text-lg font-black">${totalIncome}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase">إجمالي الدخل (د)</p>
+                </div>
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
+                    <p class="text-blue-400 text-lg font-black">${activeSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase">مشتركون نشطون</p>
+                </div>
+                <div class="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-center">
+                    <p class="text-rose-400 text-lg font-black">${expiredSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase">اشتراكات منتهية</p>
+                </div>
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+                    <p class="text-amber-400 text-lg font-black">${pendingTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase">تجارب بانتظار موافقة</p>
+                </div>
+                <div class="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-center">
+                    <p class="text-purple-400 text-lg font-black">${activeTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase">تجارب نشطة</p>
+                </div>
+            </div>`;
+    } catch(e) {}
 };
 
 window.loadFinancePending = async () => {
@@ -959,6 +1007,7 @@ window.loadFinancePending = async () => {
                 <div class="text-right">
                     <p class="text-white text-xs font-black">${r.name}</p>
                     <p class="text-slate-500 text-[10px]">${r.phone} · ${r.payMethod} · ${r.transferRef}</p>
+                    <p class="text-amber-400 text-[10px] font-black">📦 باقة ${r.plan || 5} أعضاء — ${r.price || 200} دينار</p>
                     <p class="text-slate-600 text-[10px]">${new Date(r.timestamp).toLocaleString('ar-SA')}</p>
                 </div>
                 <div class="flex gap-2">
@@ -1034,6 +1083,51 @@ window.loadPayments = async () => {
                 ${s.status === 'active' ? '✅ نشط' : '⛔ منتهي'}
             </span>
         </div>`).join('');
+};
+
+
+window.exportSubscribersPDF = () => {
+    const subs = window.subscribers || [];
+    if (subs.length === 0) { window.showNotif('لا يوجد مشتركون للتصدير', 'error'); return; }
+    
+    let html = `
+    <html><head><meta charset="UTF-8">
+    <style>
+        body { font-family: Arial; direction: rtl; padding: 20px; background: #fff; }
+        h1 { color: #e11d48; font-size: 20px; border-bottom: 2px solid #e11d48; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+        th { background: #1e1b4b; color: white; padding: 8px; text-align: right; }
+        td { padding: 7px; border-bottom: 1px solid #e5e7eb; text-align: right; }
+        tr:nth-child(even) { background: #f9fafb; }
+        .active { color: #059669; font-weight: bold; }
+        .expired { color: #dc2626; font-weight: bold; }
+        .footer { margin-top: 20px; font-size: 10px; color: #6b7280; }
+    </style></head><body>
+    <h1>🛡️ ERG SYSTEM — قائمة المشتركين</h1>
+    <p style="color:#6b7280;font-size:11px;">تاريخ التصدير: ${new Date().toLocaleString('ar-SA')}</p>
+    <table>
+        <thead><tr>
+            <th>#</th><th>اسم القائد</th><th>كود الوصول</th><th>السعة</th><th>تاريخ الانتهاء</th><th>الحالة</th>
+        </tr></thead>
+        <tbody>
+        ${subs.map((s, i) => `
+            <tr>
+                <td>${i+1}</td>
+                <td>${s.ownerName || '—'}</td>
+                <td style="font-family:monospace;font-size:10px;">${s.subKey?.substring(0,8)}***</td>
+                <td>${s.maxMembers || 5} أعضاء</td>
+                <td>${s.expiryDate || '—'}</td>
+                <td class="${s.status === 'active' ? 'active' : 'expired'}">${s.status === 'active' ? '✅ نشط' : '⛔ منتهي'}</td>
+            </tr>`).join('')}
+        </tbody>
+    </table>
+    <div class="footer">ERG SYSTEM — منظومة الاستجابة الميداني الموحد | إجمالي: ${subs.length} مشترك</div>
+    </body></html>`;
+    
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.print();
 };
 
 window.loadBlocked = async () => {
@@ -1171,10 +1265,10 @@ window.addNewMember = async () => {
             if (!subData.isPaid) return window.showNotif("اشتراك القائد غير مفعل", "error");
             const currentMyTeamCount = window.teamMembers.filter(m => m.parentKey === pKey).length;
             const isExistingMember = window.teamMembers.some(m => m.id === key);
-    const maxAllowed = window.isTrial ? 1 : (subData.maxMembers || 5);
+    const maxAllowed = window.isTrial ? 2 : (subData.maxMembers || 5);
         if (!isExistingMember && currentMyTeamCount >= maxAllowed) {
             if (window.isTrial) {
-                window.showNotif("⛔ الحساب التجريبي يسمح بعضو واحد فقط — اشترك للحصول على المزيد", "error");
+                window.showNotif("⛔ التجربة المجانية تسمح بـ 2 أعضاء فقط — اشترك للحصول على المزيد", "error");
                 setTimeout(() => window.showSubscriptionDetails(), 2000);
             } else {
                 window.showNotif(`وصلت للحد الأقصى للمشتركين`, "error");
@@ -1721,6 +1815,10 @@ window.clearAllReports = () => {
 
 // --- محرك تشغيل النظام والواجهة (محدث بقوة الإظهار) ---
 window.launchOS = (role, key, msg) => {
+    // تحديد نوع الجلسة
+    window.isTrial = false;
+    window.trialDaysLeft = 0;
+
 // فحص انتهاء صلاحية الاشتراك
     if (role === 'leader') {
         const sub = window.subscribers?.find(s => s.id === key || s.secretKey === key);
@@ -2577,7 +2675,7 @@ if(window.userRole === 'master') {
 
                             // تحديث اللوحة تلقائياً
                             window.openWin('winFinance');
-                    setTimeout(() => window.financeTab('pending'), 300);
+            setTimeout(() => { window.financeTab('pending'); window.loadFinanceStats(); }, 300);
                         }
                     }
                 });
@@ -4214,8 +4312,12 @@ window.renderLauncher = () => {
         const e = document.getElementById(i);
         if (e) e.style.display = c ? 'flex' : 'none';
     };
+    const M = window.userRole === 'master';
+    const L = window.userRole === 'leader';
     // اللوحة تظهر للمدير والقائد فقط
-    D('app_dashboard', window.userRole === 'master' || window.userRole === 'leader');
+    D('app_dashboard', M || L);
+    // المالية للمدير فقط — إخفاء صريح في التجربة وعند القائد
+    D('app_finance', M && !window.isTrial);
 };
 
 
@@ -7036,6 +7138,9 @@ body.desktop-active {
             </button>
         </div>
 
+        <!-- إحصائيات سريعة -->
+        <div id="financeStats" class="px-4 pt-3 shrink-0"></div>
+
         <!-- محتوى التبويبات -->
         <div class="flex-1 overflow-hidden p-4">
 
@@ -7066,6 +7171,13 @@ body.desktop-active {
                 <div class="flex items-center justify-between mb-3">
                     <span class="text-xs text-slate-500 font-black uppercase">المشتركون المعتمدون</span>
                     <button onclick="window.loadPayments()" class="text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1 rounded-lg transition-all">🔄 تحديث</button>
+                </div>
+<div class="flex justify-between items-center mb-3">
+                    <span class="text-xs text-slate-500 font-black uppercase">المشتركون المعتمدون</span>
+                    <button onclick="window.exportSubscribersPDF()"
+                        class="text-[10px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white px-3 py-1 rounded-lg transition-all font-black border border-emerald-600/30">
+                        📄 تصدير PDF
+                    </button>
                 </div>
                 <div id="finPaymentsList" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
                     <p class="text-center text-slate-600 text-xs py-10">جاري التحميل...</p>
@@ -7868,9 +7980,13 @@ body.desktop-active {
                 <span class="text-slate-500 font-bold">مرجع التحويل</span>
                 <span id="track_ref" class="text-emerald-400 font-mono font-black"></span>
             </div>
-            <div class="flex justify-between items-center">
+            <div class="flex justify-between items-center border-b border-white/5 pb-2">
                 <span class="text-slate-500 font-bold">وقت الإرسال</span>
                 <span id="track_time" class="text-slate-400 font-bold text-xs"></span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-bold">الباقة المختارة</span>
+                <p id="track_plan" class="text-purple-400 font-black text-sm">—</p>
             </div>
         </div>
 
