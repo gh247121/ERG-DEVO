@@ -212,13 +212,7 @@ window.startPublicPayment = () => {
     const paypalLink = document.getElementById('paypalLink');
     if (paypalLink) paypalLink.href = `https://paypal.me/momoom1994/${totalPrice}`;
 
-    const stripeLink = document.getElementById('stripeLink');
-    if (stripeLink) stripeLink.href = `https://buy.stripe.com/YOUR_STRIPE_LINK?amount=${totalPrice * 100}`;
-
-    const wiseLink = document.getElementById('wiseLink');
-    if (wiseLink) wiseLink.href = `https://wise.com/pay/me/YOUR_WISE_HANDLE/${totalPrice}`;
-
-    window.openWin('winPayment');
+        window.openWin('winPayment');
 };
 
 
@@ -8012,39 +8006,7 @@ body.desktop-active {
                 </div>
             </div>
 
-            <!-- Stripe و Wise -->
-            <div class="grid grid-cols-2 gap-3">
-                <!-- Stripe -->
-                <div class="rounded-xl p-4 border transition-all text-center flex flex-col justify-between" style="background:rgba(99,102,241,0.06); border-color:rgba(99,102,241,0.25);">
-                    <div>
-                        <p class="text-[9px] text-indigo-400 font-black uppercase mb-2">🌍 دولي — كروت بنكية</p>
-                        <p class="text-white font-black text-sm mb-1">Stripe</p>
-                        <p class="text-slate-500 text-[10px] mb-3">Visa / Mastercard / Apple Pay</p>
-                    </div>
-                    <a id="stripeLink" href="https://buy.stripe.com/YOUR_STRIPE_LINK" target="_blank"
-                       onclick="document.getElementById('pay_method_select').value='Stripe'"
-                       class="w-full py-2 rounded-lg font-black text-white text-xs flex items-center justify-center gap-1 transition-all"
-                       style="background:#6366f1;">
-                        💳 فتح Stripe
-                    </a>
-                </div>
-
-                <!-- Wise -->
-                <div class="rounded-xl p-4 border transition-all text-center flex flex-col justify-between" style="background:rgba(16,185,129,0.06); border-color:rgba(16,185,129,0.25);">
-                    <div>
-                        <p class="text-[9px] text-emerald-400 font-black uppercase mb-2">🌍 تحويل بنكي دولي</p>
-                        <p class="text-white font-black text-sm mb-1">Wise</p>
-                        <p class="text-slate-500 text-[10px] mb-3">بدون عمولة تقريباً</p>
-                    </div>
-                    <a id="wiseLink" href="https://wise.com/pay/me/YOUR_WISE_HANDLE" target="_blank"
-                       onclick="document.getElementById('pay_method_select').value='Wise'"
-                       class="w-full py-2 rounded-lg font-black text-white text-xs flex items-center justify-center gap-1 transition-all"
-                       style="background:#10b981;">
-                        🏦 فتح Wise
-                    </a>
-                </div>
-            </div>
-
+            
             <!-- بيانات التحويل -->
             <div class="rounded-xl p-4 border border-amber-500/15" style="background:rgba(245,158,11,0.04);">
                 <p class="text-[10px] text-amber-400 font-black mb-3 flex items-center gap-1">
@@ -8054,8 +8016,6 @@ body.desktop-active {
                     <select id="pay_method_select" class="w-full border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-bold outline-none focus:border-emerald-500 transition-all text-right" style="background:#1a1a2e;">
                         <option value="CliQ">CliQ / محافظ إلكتروني</option>
                         <option value="PayPal/Card">PayPal / بطاقة بنكية</option>
-                        <option value="Stripe">Stripe (كرت بنكي / Apple Pay)</option>
-                        <option value="Wise">Wise (تحويل بنكي دولي)</option>
                         <option value="تحويل بنكي">تحويل بنكي مباشر</option>
                     </select>
                     <input id="transfer_ref_input" type="text"
