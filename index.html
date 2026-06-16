@@ -996,13 +996,23 @@ window.financeTab = (tab) => {
         document.getElementById(`fpanel_${t}`)?.classList.add('hidden');
         document.getElementById(`fpanel_${t}`)?.classList.remove('flex');
         const btn = document.getElementById(`ftab_${t}`);
-        if (btn) { btn.classList.remove('text-emerald-400','border-emerald-500'); btn.classList.add('text-slate-500','border-transparent'); }
+        if (btn) {
+            btn.classList.remove('text-emerald-400');
+            btn.classList.add('text-slate-500');
+            btn.style.background = '';
+            btn.style.border = '1px solid transparent';
+        }
     });
     const panel = document.getElementById(`fpanel_${tab}`);
     panel?.classList.remove('hidden');
     panel?.classList.add('flex');
     const activeBtn = document.getElementById(`ftab_${tab}`);
-    if (activeBtn) { activeBtn.classList.add('text-emerald-400','border-emerald-500'); activeBtn.classList.remove('text-slate-500','border-transparent'); }
+    if (activeBtn) {
+        activeBtn.classList.add('text-emerald-400');
+        activeBtn.classList.remove('text-slate-500');
+        activeBtn.style.background = 'rgba(16,185,129,0.12)';
+        activeBtn.style.border = '1px solid rgba(16,185,129,0.3)';
+    }
     if (tab === 'pending') window.loadFinancePending();
     window.loadFinanceStats();
     if (tab === 'trials') window.loadTrials();
@@ -1027,26 +1037,26 @@ window.loadFinanceStats = async () => {
 
         const statsEl = document.getElementById('financeStats');
         if (statsEl) statsEl.innerHTML = `
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-                <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
-                    <p class="text-emerald-400 text-lg font-black">${totalIncome}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase">إجمالي الدخل (د)</p>
+            <div class="grid grid-cols-5 gap-3">
+                <div class="rounded-2xl p-4 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                    <p class="text-2xl font-black text-emerald-400">${totalIncome}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">💵 إجمالي الدخل $</p>
                 </div>
-                <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
-                    <p class="text-blue-400 text-lg font-black">${activeSubs}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase">مشتركون نشطون</p>
+                <div class="rounded-2xl p-4 text-center" style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
+                    <p class="text-2xl font-black text-blue-400">${activeSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">✅ مشتركون نشطون</p>
                 </div>
-                <div class="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-center">
-                    <p class="text-rose-400 text-lg font-black">${expiredSubs}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase">اشتراكات منتهية</p>
+                <div class="rounded-2xl p-4 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
+                    <p class="text-2xl font-black text-rose-400">${expiredSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">⛔ اشتراكات منتهية</p>
                 </div>
-                <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
-                    <p class="text-amber-400 text-lg font-black">${pendingTrials}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase">تجارب بانتظار موافقة</p>
+                <div class="rounded-2xl p-4 text-center" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+                    <p class="text-2xl font-black text-amber-400">${pendingTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">⏳ تجارب معلقة</p>
                 </div>
-                <div class="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-center">
-                    <p class="text-purple-400 text-lg font-black">${activeTrials}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase">تجارب نشطة</p>
+                <div class="rounded-2xl p-4 text-center" style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2);">
+                    <p class="text-2xl font-black text-purple-400">${activeTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">🎯 تجارب نشطة</p>
                 </div>
             </div>`;
     } catch(e) {}
@@ -1060,18 +1070,40 @@ window.loadFinancePending = async () => {
         const pending = snap.docs.map(d => ({id: d.id, ...d.data()})).filter(r => r.status === 'Pending Payment Verification');
         if (pending.length === 0) { list.innerHTML = '<p class="text-center text-slate-600 text-xs py-10">لا توجد طلبات معلقة</p>'; return; }
         list.innerHTML = pending.map(r => `
-            <div class="flex items-center justify-between bg-white/3 border border-white/5 rounded-xl px-4 py-3">
-                <div class="text-right">
-                    <p class="text-white text-xs font-black">${r.name}</p>
-                    <p class="text-slate-500 text-[10px]">${r.phone} · ${r.payMethod} · ${r.transferRef}</p>
-                    <p class="text-amber-400 text-[10px] font-black">📦 باقة ${r.plan || 5} أعضاء — ${r.price || 200} $</p>
-                    <p class="text-slate-600 text-[10px]">${new Date(r.timestamp).toLocaleString('ar-SA')}</p>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="window.approveRequest('${r.id}','${r.name}','${r.phone}')"
-                        class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg text-[10px] font-black transition-all border border-emerald-600/30">✅ اعتماد</button>
-                    <button onclick="window.rejectRequest('${r.id}','${r.name}')"
-                        class="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg text-[10px] font-black transition-all border border-rose-600/30">❌ رفض</button>
+            <div class="rounded-2xl p-4 text-right transition-all" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07);">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex gap-2 shrink-0 mt-1">
+                        <button onclick="window.approveRequest('${r.id}','${r.name}','${r.phone}')"
+                            class="px-4 py-2 rounded-xl text-[11px] font-black text-white transition-all"
+                            style="background:rgba(16,185,129,0.2); border:1px solid rgba(16,185,129,0.4);">✅ اعتماد</button>
+                        <button onclick="window.rejectRequest('${r.id}','${r.name}')"
+                            class="px-4 py-2 rounded-xl text-[11px] font-black text-white transition-all"
+                            style="background:rgba(220,38,38,0.15); border:1px solid rgba(220,38,38,0.3);">❌ رفض</button>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-end gap-3 mb-2">
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">⏳ بانتظار المراجعة</span>
+                            <p class="text-white font-black text-sm">${r.name}</p>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="rounded-xl p-2 text-center" style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15);">
+                                <p class="text-indigo-400 font-black text-xs">${r.payMethod || 'CliQ'}</p>
+                                <p class="text-slate-600 text-[9px] uppercase">طريقة الدفع</p>
+                            </div>
+                            <div class="rounded-xl p-2 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15);">
+                                <p class="text-emerald-400 font-black text-xs">${r.price || 0} $</p>
+                                <p class="text-slate-600 text-[9px] uppercase">المبلغ</p>
+                            </div>
+                            <div class="rounded-xl p-2 text-center" style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.15);">
+                                <p class="text-purple-400 font-black text-xs">${r.totalLeaders || 1} قائد</p>
+                                <p class="text-slate-600 text-[9px] uppercase">عدد القادة</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between mt-2">
+                            <p class="text-slate-600 text-[10px]">${new Date(r.timestamp).toLocaleString('ar-SA')}</p>
+                            <p class="text-slate-500 text-[10px]">📞 ${r.phone} &nbsp;|&nbsp; 🔑 ${r.transferRef || '—'}</p>
+                        </div>
+                    </div>
                 </div>
             </div>`).join('');
     } catch(e) { list.innerHTML = '<p class="text-center text-rose-500 text-xs py-10">خطأ في التحميل</p>'; }
@@ -1518,9 +1550,10 @@ window.openWin = (id) => {
 
 window.closeWin = (id) => {
     document.getElementById(id)?.classList.add('hidden');
+    // winPayment يُغلق فقط دون goHome لأن التتبع يفتح بعده مباشرة
+    if (id === 'winPayment') return;
     window.goHome();
 };
-
 
 
 
@@ -6519,51 +6552,92 @@ body.desktop-active {
     </button>
 </div>
 
-<div id="subFields" class="hidden relative"
-     style="background:linear-gradient(145deg,rgba(16,185,129,0.06) 0%,rgba(0,0,0,0.3) 100%);
-            border:1px solid rgba(16,185,129,0.16);
-            border-radius:2rem;
-            padding:2rem;">
-    <button onclick="window.resetEntryUI()" class="absolute top-6 left-6 w-12 h-12 bg-white/5 hover:bg-rose-500/20 rounded-full flex items-center justify-center text-white/50 hover:text-rose-500 transition-all border border-white/10 hover:border-rose-500/50" title="إلغاء وتراجع">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-    </button>
+<div id="subFields" class="hidden fixed inset-0 z-[150000] flex items-center justify-center p-4" style="background:rgba(0,0,0,0.85); backdrop-filter:blur(12px);">
+    <div class="w-full relative text-right" style="max-width:900px; background:linear-gradient(145deg,#0d1117 0%,#0a0f1a 100%); border:1px solid rgba(16,185,129,0.2); border-radius:2rem; overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 60px rgba(16,185,129,0.06);">
 
-    <div class="text-center space-y-2 mb-8 pt-4">
-        <div class="w-20 h-20 bg-emerald-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-            <span class="text-4xl">🎖️</span>
+        <!-- شريط علوي -->
+        <div class="flex items-center justify-between px-8 py-4" style="background:linear-gradient(90deg,rgba(16,185,129,0.12),rgba(0,0,0,0)); border-bottom:1px solid rgba(16,185,129,0.12);">
+            <button onclick="window.resetEntryUI()" class="w-9 h-9 rounded-xl bg-white/5 hover:bg-rose-500/20 flex items-center justify-center text-white/40 hover:text-rose-400 transition-all border border-white/10">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-lg italic uppercase tracking-wider">تفعيل رخصة قائد ميداني</p>
+                    <p class="text-emerald-400 text-xs font-bold">رادار GPS • تقارير تكتيكية • إدارة الفرق</p>
+                </div>
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3);">🎖️</div>
+            </div>
         </div>
-        <h4 class="text-white font-black text-2xl italic uppercase">تفعيل رخصة قائد ميداني</h4>
-        <p class="text-emerald-400 font-bold text-sm italic">تشمل: إدارة 5 أعضاء • رادار GPS • تقارير تكتيكية</p>
-    </div>
-    
-    <div class="space-y-4">
-        <input type="text" id="subscribe_name_input" placeholder="الاسم الرباعي للمشترك" class="w-full bg-black/60 border border-white/10 p-5 rounded-[2rem] text-right text-white focus:border-emerald-500 outline-none text-lg italic shadow-inner transition-all">
-        
-        <input type="tel" id="subscribe_phone_input" placeholder="رقم الهاتف" class="w-full bg-black/60 border border-white/10 p-5 rounded-[2rem] text-right text-white focus:border-emerald-500 outline-none text-lg italic shadow-inner transition-all" dir="rtl">
 
-        <!-- قسم القادة -->
-        <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:1.5rem; padding:1.25rem;" class="space-y-3">
-            <div class="flex items-center justify-between mb-2">
-                <button type="button" onclick="window.addLeaderRow()"
-                    class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/20 transition-all">
-                    ➕ إضافة قائد
+        <!-- المحتوى الرئيسي — عمودان -->
+        <div class="grid grid-cols-2 gap-0" style="min-height:420px;">
+
+            <!-- العمود الأيمن: بيانات المشترك -->
+            <div class="p-8 space-y-4" style="border-left:1px solid rgba(255,255,255,0.06);">
+                <p class="text-slate-400 text-xs font-black uppercase tracking-widest mb-4">① بيانات المشترك</p>
+
+                <div class="relative">
+                    <input type="text" id="subscribe_name_input" placeholder="الاسم الرباعي للمشترك"
+                        class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-right text-white focus:border-emerald-500 outline-none text-sm italic shadow-inner transition-all">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 text-sm">👤</span>
+                </div>
+
+                <div class="relative">
+                    <input type="tel" id="subscribe_phone_input" placeholder="رقم الهاتف"
+                        class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-right text-white focus:border-emerald-500 outline-none text-sm italic shadow-inner transition-all" dir="rtl">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 text-sm">📞</span>
+                </div>
+
+                <div class="relative">
+                    <input type="email" id="subscribe_email_input" placeholder="البريد الإلكتروني لاستلام الأكواد"
+                        class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-right text-white focus:border-emerald-500 outline-none text-sm italic shadow-inner transition-all" dir="rtl">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 text-sm">📧</span>
+                </div>
+
+                <!-- بطاقة السعر -->
+                <div class="rounded-2xl p-4 mt-2" style="background:rgba(16,185,129,0.07); border:1px solid rgba(16,185,129,0.18);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-emerald-400 font-black text-xs uppercase">كل قائد</span>
+                        <span class="text-white font-black text-sm">300 $</span>
+                    </div>
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-emerald-400 font-black text-xs uppercase">كل عضو / سنة</span>
+                        <span class="text-white font-black text-sm">30 $</span>
+                    </div>
+                    <div class="h-px w-full mb-3" style="background:rgba(16,185,129,0.2);"></div>
+                    <p id="planPriceNote" class="text-emerald-400 font-black text-sm text-right">💰 أضف قائداً واحداً على الأقل</p>
+                </div>
+
+                <button onclick="window.startPublicPayment()"
+                    class="w-full py-4 rounded-2xl font-black text-white text-sm uppercase italic transition-all active:scale-95 border-b-4 border-emerald-900"
+                    style="background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 8px 25px rgba(16,185,129,0.3);">
+                    استمرار نحو الدفع الآمن 🔒
                 </button>
-                <p class="text-emerald-400 text-xs font-black uppercase">👮 القادة وأعضاؤهم</p>
             </div>
-            <div id="leadersContainer" class="space-y-2">
-                <!-- تُضاف صفوف القادة هنا -->
+
+            <!-- العمود الأيسر: القادة -->
+            <div class="p-8 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <button type="button" onclick="window.addLeaderRow()"
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black text-white transition-all"
+                        style="background:rgba(16,185,129,0.2); border:1px solid rgba(16,185,129,0.4);">
+                        ➕ إضافة قائد
+                    </button>
+                    <p class="text-slate-400 text-xs font-black uppercase tracking-widest">② القادة وأعضاؤهم</p>
+                </div>
+
+                <!-- منطقة القادة قابلة للتمرير -->
+                <div id="leadersContainer" class="flex-1 space-y-2 overflow-y-auto pr-1" style="max-height:280px;">
+                    <!-- تُضاف صفوف القادة هنا -->
+                </div>
+
+                <!-- تعليمات -->
+                <div class="mt-4 rounded-xl p-3 flex items-start gap-3" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15);">
+                    <span class="text-amber-400 text-sm mt-0.5">⚠️</span>
+                    <p class="text-amber-400/70 text-xs font-bold leading-relaxed">الحد الأدنى لكل قائد 5 أعضاء. يمكنك إضافة عدد غير محدود من القادة وتخصيص عدد الأعضاء لكل واحد منهم.</p>
+                </div>
             </div>
-            <p class="text-slate-500 text-xs text-right px-1">الحد الأدنى لكل قائد: 5 أعضاء — كل قائد: 300$ • كل عضو: 30$</p>
+
         </div>
-
-        <p id="planPriceNote" class="text-emerald-400 text-sm font-black text-right px-2">💰 أضف قائداً واحداً على الأقل</p>
-
-        <input type="email" id="subscribe_email_input" placeholder="📧 البريد الإلكتروني لاستلام كود الدخول" class="w-full bg-black/60 border border-white/10 p-5 rounded-[2rem] text-right text-white focus:border-emerald-500 outline-none text-lg italic shadow-inner transition-all" dir="rtl">
     </div>
-
-   <button onclick="window.startPublicPayment()" class="w-full py-6 bg-gradient-to-l from-emerald-600 to-teal-500 rounded-[2rem] font-black text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] hover:scale-[1.02] uppercase italic mt-4 transition-all border-b-4 border-emerald-800 text-xl">
-        استمرار نحو الدفع الآمن 🔒
-    </button>
 </div>
     </div>
 </div>
@@ -7251,100 +7325,101 @@ body.desktop-active {
 
 
 
-<div id="winFinance" class="app-window bg-[#0a0a0f] text-right" style="padding:0;">
+<div id="winFinance" class="app-window bg-[#080b12] text-right" style="padding:0;">
     <div class="w-full h-full flex flex-col">
 
         <!-- شريط العنوان -->
-        <div class="flex items-center justify-between px-6 py-3 border-b border-white/5 shrink-0" style="background:rgba(16,185,129,0.07);">
-            <div class="flex items-center gap-4">
-                <div class="w-2 h-6 rounded-full bg-emerald-500"></div>
-                <h2 class="text-sm font-black text-white uppercase tracking-widest">المالية والاشتراكات</h2>
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(16,185,129,0.1),transparent); border-bottom:1px solid rgba(16,185,129,0.1);">
+            <div class="flex items-center gap-3">
+                <button onclick="window.closeWin('winFinance')" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+                <button onclick="window.loadFinanceStats()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-black text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all">🔄 تحديث</button>
             </div>
-            <button onclick="window.closeWin('winFinance')" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-white/50 hover:text-emerald-400 transition-all text-sm flex items-center justify-center">✕</button>
-        </div>
-
-        <!-- تبويبات -->
-        <div class="flex border-b border-white/5 shrink-0" style="background:#0d0d14;">
-            <button onclick="window.financeTab('pending')" id="ftab_pending"
-                class="finance-tab active-ftab px-5 py-2.5 text-xs font-black text-emerald-400 border-b-2 border-emerald-500 transition-all">
-                ⏳ الطلبات المعلقة
-            </button>
-            <button onclick="window.financeTab('trials')" id="ftab_trials"
-                class="finance-tab px-5 py-2.5 text-xs font-black text-slate-500 border-b-2 border-transparent hover:text-white transition-all">
-                🎯 التجارب المجانية
-            </button>
-            <button onclick="window.financeTab('payments')" id="ftab_payments"
-                class="finance-tab px-5 py-2.5 text-xs font-black text-slate-500 border-b-2 border-transparent hover:text-white transition-all">
-                💰 سجل الدفعات
-            </button>
-            <button onclick="window.financeTab('blocked')" id="ftab_blocked"
-                class="finance-tab px-5 py-2.5 text-xs font-black text-slate-500 border-b-2 border-transparent hover:text-white transition-all">
-                🚫 محظورو التجربة
-            </button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-widest">المالية والاشتراكات</p>
+                    <p class="text-emerald-500/50 text-[10px] font-mono uppercase tracking-widest">Finance & Subscriptions</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.25);">💰</div>
+            </div>
         </div>
 
         <!-- إحصائيات سريعة -->
-        <div id="financeStats" class="px-4 pt-3 shrink-0"></div>
+        <div id="financeStats" class="px-6 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);"></div>
+
+        <!-- تبويبات محسّنة -->
+        <div class="flex gap-1 px-6 py-3 shrink-0" style="background:#080b12; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <button onclick="window.financeTab('pending')" id="ftab_pending"
+                class="finance-tab active-ftab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-emerald-400 transition-all"
+                style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
+                ⏳ الطلبات المعلقة
+            </button>
+            <button onclick="window.financeTab('trials')" id="ftab_trials"
+                class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
+                🎯 التجارب المجانية
+            </button>
+            <button onclick="window.financeTab('payments')" id="ftab_payments"
+                class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
+                📋 سجل الدفعات
+            </button>
+            <button onclick="window.financeTab('blocked')" id="ftab_blocked"
+                class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
+                🚫 المحظورون
+            </button>
+        </div>
 
         <!-- محتوى التبويبات -->
-        <div class="flex-1 overflow-hidden p-4">
+        <div class="flex-1 overflow-hidden p-6">
 
             <!-- الطلبات المعلقة -->
-            <div id="fpanel_pending" class="h-full flex flex-col gap-3">
+            <div id="fpanel_pending" class="h-full flex flex-col gap-4">
                 <div class="flex items-center justify-between">
-                    <span class="text-xs text-slate-500 font-black uppercase">الطلبات بانتظار المراجعة</span>
-                    <button onclick="window.loadPendingRequests()" class="text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1 rounded-lg transition-all">🔄 تحديث</button>
+                    <button onclick="window.loadFinancePending()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث القائمة</button>
+                    <span class="text-slate-500 text-xs font-black uppercase">الطلبات بانتظار المراجعة والاعتماد</span>
                 </div>
-                <div id="finPendingList" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-                    <p class="text-center text-slate-600 text-xs py-10">جاري التحميل...</p>
+                <div id="finPendingList" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                    <p class="text-center text-slate-600 text-xs py-16">جاري التحميل...</p>
                 </div>
             </div>
 
             <!-- التجارب المجانية -->
-            <div id="fpanel_trials" class="h-full flex-col gap-3 hidden">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-xs text-slate-500 font-black uppercase">التجارب المجانية النشطة</span>
-                    <button onclick="window.loadTrials()" class="text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1 rounded-lg transition-all">🔄 تحديث</button>
+            <div id="fpanel_trials" class="h-full flex-col gap-4 hidden">
+                <div class="flex items-center justify-between">
+                    <button onclick="window.loadTrials()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث</button>
+                    <span class="text-slate-500 text-xs font-black uppercase">التجارب المجانية النشطة والمعلقة</span>
                 </div>
-                <div id="finTrialsList" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-                    <p class="text-center text-slate-600 text-xs py-10">جاري التحميل...</p>
+                <div id="finTrialsList" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                    <p class="text-center text-slate-600 text-xs py-16">جاري التحميل...</p>
                 </div>
             </div>
 
             <!-- سجل الدفعات -->
-            <div id="fpanel_payments" class="h-full flex-col gap-3 hidden">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-xs text-slate-500 font-black uppercase">المشتركون المعتمدون</span>
-                    <button onclick="window.loadPayments()" class="text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1 rounded-lg transition-all">🔄 تحديث</button>
+            <div id="fpanel_payments" class="h-full flex-col gap-4 hidden">
+                <div class="flex items-center justify-between">
+                    <div class="flex gap-2">
+                        <button onclick="window.loadPayments()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث</button>
+                        <button onclick="window.exportSubscribersPDF()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all">📄 تصدير PDF</button>
+                    </div>
+                    <span class="text-slate-500 text-xs font-black uppercase">المشتركون المعتمدون والنشطون</span>
                 </div>
-<div class="flex justify-between items-center mb-3">
-                    <span class="text-xs text-slate-500 font-black uppercase">المشتركون المعتمدون</span>
-                    <button onclick="window.exportSubscribersPDF()"
-                        class="text-[10px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white px-3 py-1 rounded-lg transition-all font-black border border-emerald-600/30">
-                        📄 تصدير PDF
-                    </button>
-                </div>
-                <div id="finPaymentsList" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-                    <p class="text-center text-slate-600 text-xs py-10">جاري التحميل...</p>
+                <div id="finPaymentsList" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                    <p class="text-center text-slate-600 text-xs py-16">جاري التحميل...</p>
                 </div>
             </div>
 
             <!-- المحظورون -->
-            <div id="fpanel_blocked" class="h-full flex-col gap-3 hidden">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-xs text-slate-500 font-black uppercase">أرقام محظورة من التجربة المجانية</span>
-                    <button onclick="window.loadBlocked()" class="text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 px-3 py-1 rounded-lg transition-all">🔄 تحديث</button>
+            <div id="fpanel_blocked" class="h-full flex-col gap-4 hidden">
+                <div class="flex items-center justify-between">
+                    <button onclick="window.loadBlocked()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث</button>
+                    <span class="text-slate-500 text-xs font-black uppercase">أرقام محظورة من التجربة المجانية</span>
                 </div>
-                <div id="finBlockedList" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-                    <p class="text-center text-slate-600 text-xs py-10">لا يوجد أرقام محظورة</p>
+                <div id="finBlockedList" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                    <p class="text-center text-slate-600 text-xs py-16">لا يوجد أرقام محظورة</p>
                 </div>
             </div>
 
         </div>
     </div>
 </div>
-
-
 
 <div id="winSubs" class="app-window bg-[#0a0a0f] text-right" style="padding:0;">
     <div class="w-full h-full flex flex-col">
@@ -7945,197 +8020,246 @@ body.desktop-active {
 
 <div id="winPayment" class="app-window bg-black/98 hidden flex-col items-center justify-center z-[300000] overflow-y-auto" style="padding:0;">
     <div class="w-full h-full flex items-center justify-center p-4">
-    <div class="w-full max-w-xl relative text-right" style="background:#0d0d14; border-radius:20px; border:1px solid rgba(255,255,255,0.07); overflow:hidden;">
+    <div class="w-full relative text-right" style="max-width:820px; background:linear-gradient(145deg,#0a0d14 0%,#080b12 100%); border-radius:24px; border:1px solid rgba(16,185,129,0.15); overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 60px rgba(16,185,129,0.05);">
 
         <!-- شريط علوي -->
-        <div class="flex items-center justify-between px-5 py-3 border-b border-white/5" style="background:rgba(16,185,129,0.08);">
+        <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(90deg,rgba(16,185,129,0.1),transparent); border-bottom:1px solid rgba(255,255,255,0.06);">
+            <button onclick="window.closeWin('winPayment')" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
             <div class="flex items-center gap-3">
-                <div class="w-2 h-5 rounded-full bg-emerald-500"></div>
-                <span class="text-xs font-black text-white uppercase tracking-widest">بوابة الاشتراك</span>
-            </div>
-            <button onclick="window.closeWin('winPayment')" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center">✕</button>
-        </div>
-
-        <!-- ملخص الباقة -->
-        <div class="px-5 py-4 border-b border-white/5" style="background:rgba(16,185,129,0.04);">
-            <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-[10px] text-slate-500 font-black uppercase mb-1">الباقة المختارة</p>
-                    <p id="payPlanSummary" class="text-white text-sm font-black">باقة 5 أعضاء</p>
+                    <p class="text-white font-black text-sm uppercase tracking-widest">بوابة الدفع الآمنة</p>
+                    <p class="text-emerald-500/60 text-[10px] font-mono uppercase tracking-widest">Secure Payment Gateway</p>
                 </div>
-                <div class="text-center">
-                    <p class="text-[10px] text-slate-500 font-black uppercase mb-1">المبلغ السنوي</p>
-                    <p class="text-emerald-400 font-black text-xl"><span id="paymentPriceDisplay">200</span> <span class="text-sm">$</span></p>
-                </div>
+                <div class="w-2 h-6 rounded-full bg-emerald-500 animate-pulse"></div>
+            </div>
+        </div>
+
+        <!-- ملخص الطلب -->
+        <div class="px-6 py-4" style="background:rgba(16,185,129,0.04); border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="flex items-center justify-between">
                 <div class="flex gap-2">
-                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(16,185,129,0.15); color:#10b981;">1</div>
-                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(255,255,255,0.05); color:#6b7280;">2</div>
-                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(255,255,255,0.05); color:#6b7280;">3</div>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);">1</div>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(255,255,255,0.04); color:#4b5563; border:1px solid rgba(255,255,255,0.08);">2</div>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style="background:rgba(255,255,255,0.04); color:#4b5563; border:1px solid rgba(255,255,255,0.08);">3</div>
+                </div>
+                <div class="flex items-center gap-8">
+                    <div class="text-right">
+                        <p class="text-[10px] text-slate-500 font-black uppercase mb-0.5">الباقة المختارة</p>
+                        <p id="payPlanSummary" class="text-white text-sm font-black">—</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] text-slate-500 font-black uppercase mb-0.5">المبلغ السنوي</p>
+                        <p class="font-black text-2xl" style="color:#10b981;"><span id="paymentPriceDisplay">0</span> <span class="text-sm">$</span></p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="p-5 space-y-4">
+        <!-- المحتوى الرئيسي — عمودان -->
+        <div class="grid grid-cols-2" style="min-height:340px;">
 
-            <!-- طرق الدفع -->
-            <div class="grid grid-cols-2 gap-3">
+            <!-- العمود الأيمن: طرق الدفع -->
+            <div class="p-6 space-y-4" style="border-left:1px solid rgba(255,255,255,0.05);">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">اختر طريقة الدفع</p>
+
                 <!-- CliQ -->
-                <div class="rounded-xl p-4 border transition-all cursor-pointer text-center" style="background:rgba(99,102,241,0.06); border-color:rgba(99,102,241,0.25);">
-                    <p class="text-[9px] text-indigo-400 font-black uppercase mb-2">🇯🇴 داخل الأردن</p>
-                    <p class="text-white font-black text-sm mb-1">CliQ / محافظ</p>
-                    <div class="rounded-lg py-2 px-3 mb-1 flex items-center justify-center gap-2" style="background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3);">
-                        <span class="text-indigo-200 font-mono text-sm font-black tracking-wider">IBRAWISH94</span>
-                        <button onclick="navigator.clipboard.writeText('IBRAWISH94'); window.showNotif('تم النسخ ✅','success')" class="text-indigo-400/60 hover:text-indigo-300 text-xs">📋</button>
+                <div class="rounded-2xl p-4 transition-all" style="background:rgba(99,102,241,0.07); border:1px solid rgba(99,102,241,0.22);">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[9px] text-indigo-400/70 font-black uppercase">🇯🇴 داخل الأردن</span>
+                        <span class="text-white font-black text-sm">CliQ / محافظ</span>
                     </div>
-                    <p class="text-[9px] text-indigo-400/50">البنك العربي الإسلامي</p>
+                    <div class="flex items-center justify-between rounded-xl px-4 py-3" style="background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3);">
+                        <button onclick="navigator.clipboard.writeText('IBRAWISH94'); window.showNotif('تم النسخ ✅','success')"
+                            class="text-indigo-400/60 hover:text-indigo-300 text-sm transition-all">📋</button>
+                        <span class="text-indigo-200 font-mono font-black tracking-[0.2em]">IBRAWISH94</span>
+                    </div>
+                    <p class="text-[9px] text-indigo-400/40 text-right mt-2 font-bold">البنك العربي الإسلامي</p>
                 </div>
 
                 <!-- PayPal -->
-                <div class="rounded-xl p-4 border transition-all text-center flex flex-col justify-between" style="background:rgba(59,130,246,0.06); border-color:rgba(59,130,246,0.25);">
-                    <div>
-                        <p class="text-[9px] text-blue-400 font-black uppercase mb-2">🌍 دولي</p>
-                        <p class="text-white font-black text-sm mb-1">PayPal</p>
-                        <p class="text-slate-500 text-[10px] mb-3">بطاقة بنكية / PayPal</p>
+                <div class="rounded-2xl p-4 transition-all" style="background:rgba(37,99,235,0.07); border:1px solid rgba(37,99,235,0.22);">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[9px] text-blue-400/70 font-black uppercase">🌍 دولي</span>
+                        <span class="text-white font-black text-sm">PayPal</span>
                     </div>
                     <a id="paypalLink" href="https://paypal.me/momoom1994/500" target="_blank"
                        onclick="document.getElementById('pay_method_select').value='PayPal/Card'"
-                       class="w-full py-2 rounded-lg font-black text-white text-xs flex items-center justify-center gap-1 transition-all"
-                       style="background:#2563eb;">
+                       class="w-full py-2.5 rounded-xl font-black text-white text-xs flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
+                       style="background:linear-gradient(135deg,#1d4ed8,#2563eb); box-shadow:0 4px 15px rgba(37,99,235,0.3);">
                         💳 فتح PayPal
                     </a>
+                    <p class="text-[9px] text-blue-400/40 text-right mt-2 font-bold">بطاقة بنكية / PayPal Balance</p>
                 </div>
             </div>
 
-            
-            <!-- بيانات التحويل -->
-            <div class="rounded-xl p-4 border border-amber-500/15" style="background:rgba(245,158,11,0.04);">
-                <p class="text-[10px] text-amber-400 font-black mb-3 flex items-center gap-1">
-                    <span class="animate-pulse">⚠️</span> بعد إتمام الدفع أدخل البيانات التالية
-                </p>
-                <div class="space-y-2">
-                    <select id="pay_method_select" class="w-full border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-bold outline-none focus:border-emerald-500 transition-all text-right" style="background:#1a1a2e;">
-                        <option value="CliQ">CliQ / محافظ إلكتروني</option>
-                        <option value="PayPal/Card">PayPal / بطاقة بنكية</option>
-                        <option value="تحويل بنكي">تحويل بنكي مباشر</option>
-                    </select>
+            <!-- العمود الأيسر: تأكيد الدفع -->
+            <div class="p-6 flex flex-col justify-between">
+                <div class="space-y-3">
+                    <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">بعد إتمام الدفع</p>
+
+                    <!-- اختيار طريقة الدفع -->
+                    <div class="relative">
+                        <select id="pay_method_select"
+                            class="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none focus:border-emerald-500 transition-all text-right appearance-none"
+                            style="background:#0d1117;">
+                            <option value="CliQ">CliQ / محافظ إلكتروني</option>
+                            <option value="PayPal/Card">PayPal / بطاقة بنكية</option>
+                            <option value="تحويل بنكي">تحويل بنكي مباشر</option>
+                        </select>
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none">▼</span>
+                    </div>
+
+                    <!-- رقم المرجع -->
                     <input id="transfer_ref_input" type="text"
                         placeholder="رقم المرجع أو اسم المرسل كما في الحوالة"
-                        class="w-full border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-bold placeholder-slate-600 outline-none focus:border-emerald-500 transition-all text-right"
-                        style="background:#1a1a2e;">
+                        class="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-xs font-bold placeholder-slate-700 outline-none focus:border-emerald-500 transition-all text-right"
+                        style="background:#0d1117;">
+
+                    <!-- تنبيه -->
+                    <div class="rounded-xl p-3 flex items-start gap-2" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15);">
+                        <span class="text-amber-400 text-xs animate-pulse shrink-0 mt-0.5">⚠️</span>
+                        <p class="text-amber-400/70 text-[10px] font-bold leading-relaxed">أدخل رقم المرجع بدقة لتسريع عملية التحقق من الدفع</p>
+                    </div>
+                </div>
+
+                <!-- زر الإرسال -->
+                <div class="space-y-2 mt-4">
+                    <button onclick="window.confirmExternalPayment()"
+                        class="w-full py-4 rounded-2xl font-black text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95 border-b-4 border-emerald-900"
+                        style="background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 6px 25px rgba(16,185,129,0.3);">
+                        ✅ لقد أتممت الدفع — أرسل طلبي للإدارة
+                    </button>
+                    <p class="text-center text-[10px] text-slate-600 font-bold">🔒 سيصلك كود التفعيل على بريدك الإلكتروني فور الاعتماد</p>
                 </div>
             </div>
-
-            <!-- زر الإرسال -->
-            <button onclick="window.confirmExternalPayment()"
-                class="w-full py-3 rounded-xl font-black text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-                style="background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 4px 20px rgba(16,185,129,0.3);">
-                ✅ لقد أتممت الدفع — أرسل طلبي للإدارة
-            </button>
-            <p class="text-center text-[10px] text-slate-600 font-bold">سيصلك كود التفعيل على بريدك الإلكتروني فور الاعتماد</p>
 
         </div>
     </div>
     </div>
 </div>
+
 <!-- ===== نافذة تتبع حالة الطلب ===== -->
-<div id="winOrderTracking" class="app-window p-4 md:p-6 bg-black/98 hidden flex-col items-center justify-center z-[300001]">
-    <div class="max-w-lg w-full glass p-8 rounded-[3rem] border-t-[10px] border-cyan-500 shadow-[0_0_60px_rgba(6,182,212,0.2)] text-right">
+<div id="winOrderTracking" class="app-window bg-black/98 hidden flex-col items-center justify-center z-[300001]" style="padding:1rem;">
+    <div class="w-full text-right" style="max-width:860px; background:linear-gradient(145deg,#0a0d14,#080b12); border:1px solid rgba(6,182,212,0.18); border-radius:24px; overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 60px rgba(6,182,212,0.06);">
 
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-cyan-500/10 border-2 border-cyan-500/30 rounded-2xl mb-4">
-                <span class="text-3xl">📋</span>
-            </div>
-            <h3 class="text-2xl font-black text-white italic uppercase">تتبع حالة طلبك</h3>
-            <p class="text-slate-500 text-sm font-bold mt-1">يتم تحديث الحالة تلقائياً كل 15 ثانية</p>
-        </div>
-
-        <!-- رقم الطلب -->
-        <div class="bg-cyan-900/20 border border-cyan-500/20 rounded-2xl px-6 py-4 mb-6 flex justify-between items-center">
-            <span class="text-slate-400 font-bold text-sm">رقم الطلب:</span>
-            <span id="track_req_id" class="text-cyan-300 font-mono font-black text-sm tracking-widest"></span>
-        </div>
-
-        <!-- خطوات التتبع -->
-        <div class="space-y-3 mb-6">
-
-            <!-- خطوة 1 -->
-            <div class="flex items-center gap-4 p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl">
-                <div class="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0 text-white font-black text-lg">✓</div>
+        <!-- شريط علوي -->
+        <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(90deg,rgba(6,182,212,0.1),transparent); border-bottom:1px solid rgba(6,182,212,0.1);">
+            <button onclick="window.closeOrderTracking()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-3">
                 <div>
-                    <p class="text-emerald-400 font-black text-sm">تم استلام الطلب</p>
-                    <p class="text-slate-500 text-xs font-bold">تم تسجيل طلبك في النظام بنجاح</p>
+                    <p class="text-white font-black text-sm uppercase tracking-widest">تتبع حالة الطلب</p>
+                    <p class="text-cyan-500/50 text-[10px] font-mono uppercase tracking-widest">Order Tracking System</p>
                 </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">📋</div>
             </div>
+        </div>
 
-            <!-- خطوة 2 -->
-            <div id="track_step2" class="flex items-center gap-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-2xl">
-                <div class="w-10 h-10 bg-amber-500/20 border-2 border-amber-500/50 rounded-full flex items-center justify-center flex-shrink-0 text-amber-400 font-black animate-pulse">⏳</div>
-                <div>
-                    <p class="text-amber-400 font-black text-sm">مراجعة التحويل</p>
-                    <p class="text-slate-500 text-xs font-bold">الإدارة تتحقق من عملية الدفع</p>
+        <!-- رقم الطلب + حالة -->
+        <div class="grid grid-cols-2 gap-0" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="px-6 py-4 flex items-center justify-between" style="border-left:1px solid rgba(255,255,255,0.05); background:rgba(6,182,212,0.04);">
+                <span id="track_req_id" class="text-cyan-300 font-mono font-black text-sm tracking-widest"></span>
+                <span class="text-slate-500 text-xs font-black uppercase">رقم الطلب</span>
+            </div>
+            <div class="px-6 py-4 flex items-center justify-between" style="background:rgba(245,158,11,0.04);">
+                <p id="track_status_label" class="text-amber-400 font-black text-sm">⏳ جاري المراجعة...</p>
+                <span class="text-slate-500 text-xs font-black uppercase">الحالة</span>
+            </div>
+        </div>
+
+        <!-- المحتوى الرئيسي — عمودان -->
+        <div class="grid grid-cols-2 gap-0">
+
+            <!-- العمود الأيمن: خطوات التتبع + تفاصيل -->
+            <div class="p-6 space-y-4" style="border-left:1px solid rgba(255,255,255,0.05);">
+
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest">مراحل الطلب</p>
+
+                <!-- خطوة 1 -->
+                <div class="flex items-center gap-3 p-3 rounded-2xl" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                    <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-black text-white text-sm" style="background:#059669;">✓</div>
+                    <div>
+                        <p class="text-emerald-400 font-black text-sm">تم استلام الطلب</p>
+                        <p class="text-slate-500 text-xs">تم تسجيل طلبك في النظام بنجاح</p>
+                    </div>
                 </div>
-            </div>
 
-            <!-- خطوة 3 -->
-            <div id="track_step3" class="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl opacity-40">
-                <div class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center flex-shrink-0 text-slate-500 font-black text-lg">3</div>
-                <div>
-                    <p class="text-slate-400 font-black text-sm">إرسال كود التفعيل</p>
-                    <p class="text-slate-600 text-xs font-bold">سيُرسل كودك عبر البريد الإلكتروني فور الاعتماد</p>
-                    <p class="text-amber-500/70 text-xs mt-1">⚠️ تحقق من مجلد Spam إذا لم تجد الرسالة</p>
+                <!-- خطوة 2 -->
+                <div id="track_step2" class="flex items-center gap-3 p-3 rounded-2xl" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+                    <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-black text-amber-400 text-sm animate-pulse" style="background:rgba(245,158,11,0.15); border:2px solid rgba(245,158,11,0.4);">⏳</div>
+                    <div>
+                        <p class="text-amber-400 font-black text-sm">مراجعة التحويل</p>
+                        <p class="text-slate-500 text-xs">الإدارة تتحقق من عملية الدفع</p>
+                    </div>
                 </div>
+
+                <!-- خطوة 3 -->
+                <div id="track_step3" class="flex items-center gap-3 p-3 rounded-2xl opacity-40" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);">
+                    <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-black text-slate-500 text-sm" style="background:rgba(255,255,255,0.06);">3</div>
+                    <div>
+                        <p class="text-slate-400 font-black text-sm">إرسال أكواد التفعيل</p>
+                        <p class="text-slate-600 text-xs">ستصلك الأكواد على بريدك الإلكتروني</p>
+                        <p class="text-amber-500/60 text-[10px] mt-0.5">⚠️ تحقق من مجلد Spam</p>
+                    </div>
+                </div>
+
+                <!-- زر تحديث -->
+                <button onclick="window.refreshOrderStatus(document.getElementById('track_req_id').textContent)"
+                    class="w-full py-3 rounded-2xl font-black text-cyan-400 text-xs uppercase tracking-wider transition-all hover:text-white"
+                    style="background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.2);">
+                    🔄 تحديث الحالة الآن
+                </button>
+
             </div>
 
+            <!-- العمود الأيسر: تفاصيل الطلب -->
+            <div class="p-6 flex flex-col justify-between">
+
+                <div class="space-y-1">
+                    <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-4">تفاصيل الطلب</p>
+
+                    <div class="flex justify-between items-center py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span id="track_name" class="text-white font-black text-sm"></span>
+                        <span class="text-slate-500 text-xs font-bold">الاسم</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span id="track_phone" class="text-white font-black text-sm font-mono"></span>
+                        <span class="text-slate-500 text-xs font-bold">الهاتف</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span id="track_method" class="text-cyan-400 font-black text-sm"></span>
+                        <span class="text-slate-500 text-xs font-bold">طريقة الدفع</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span id="track_ref" class="text-emerald-400 font-mono font-black text-sm"></span>
+                        <span class="text-slate-500 text-xs font-bold">مرجع التحويل</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span id="track_time" class="text-slate-400 font-bold text-xs"></span>
+                        <span class="text-slate-500 text-xs font-bold">وقت الإرسال</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2.5">
+                        <p id="track_plan" class="text-violet-400 font-black text-sm">—</p>
+                        <span class="text-slate-500 text-xs font-bold">الباقة</span>
+                    </div>
+                </div>
+
+                <!-- تنبيه + زر الرجوع -->
+                <div class="space-y-3 mt-4">
+                    <div class="rounded-2xl p-3 flex items-start gap-2" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.15);">
+                        <span class="text-cyan-400 text-xs shrink-0 mt-0.5">ℹ️</span>
+                        <p class="text-cyan-400/60 text-[10px] font-bold leading-relaxed">يتم تحديث الحالة تلقائياً كل 15 ثانية. احتفظ برقم الطلب للمتابعة مع الإدارة.</p>
+                    </div>
+                    <button onclick="window.closeOrderTracking()"
+                        class="w-full py-3 rounded-2xl font-black text-slate-400 text-sm transition-all hover:text-white"
+                        style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">
+                        ← العودة للصفحة الرئيسية
+                    </button>
+                </div>
+
+            </div>
         </div>
-
-        <!-- حالة الطلب -->
-        <div class="bg-black/40 border border-white/10 rounded-2xl p-4 mb-6 text-center">
-            <p id="track_status_label" class="text-amber-400 font-black text-sm">⏳ جاري مراجعة التحويل...</p>
-        </div>
-
-        <!-- تفاصيل الطلب -->
-        <div class="bg-black/40 border border-white/10 rounded-2xl p-5 mb-6 space-y-3 text-sm">
-            <div class="flex justify-between items-center border-b border-white/5 pb-2">
-                <span class="text-slate-500 font-bold">الاسم</span>
-                <span id="track_name" class="text-white font-black"></span>
-            </div>
-            <div class="flex justify-between items-center border-b border-white/5 pb-2">
-                <span class="text-slate-500 font-bold">الهاتف</span>
-                <span id="track_phone" class="text-white font-black font-mono"></span>
-            </div>
-            <div class="flex justify-between items-center border-b border-white/5 pb-2">
-                <span class="text-slate-500 font-bold">طريقة الدفع</span>
-                <span id="track_method" class="text-cyan-400 font-black"></span>
-            </div>
-            <div class="flex justify-between items-center border-b border-white/5 pb-2">
-                <span class="text-slate-500 font-bold">مرجع التحويل</span>
-                <span id="track_ref" class="text-emerald-400 font-mono font-black"></span>
-            </div>
-            <div class="flex justify-between items-center border-b border-white/5 pb-2">
-                <span class="text-slate-500 font-bold">وقت الإرسال</span>
-                <span id="track_time" class="text-slate-400 font-bold text-xs"></span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-slate-500 font-bold">الباقة المختارة</span>
-                <p id="track_plan" class="text-purple-400 font-black text-sm">—</p>
-            </div>
-        </div>
-
-        <!-- أزرار -->
-        <div class="space-y-3">
-            <button onclick="window.refreshOrderStatus(document.getElementById('track_req_id').textContent)"
-                    class="w-full py-4 bg-cyan-600/20 border border-cyan-500/30 rounded-2xl font-black text-cyan-400 text-sm hover:bg-cyan-600 hover:text-white transition-all">
-                🔄 تحديث الحالة الآن
-            </button>
-            <button onclick="window.closeOrderTracking()"
-                    class="w-full py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-slate-400 text-sm hover:bg-white/10 transition-all">
-                ← العودة للصفحة الرئيسية
-            </button>
-        </div>
-
     </div>
 </div>
-
 
 
 <!-- نافذة المحادثة الداخلية -->
