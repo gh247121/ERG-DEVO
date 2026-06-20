@@ -981,6 +981,8 @@ window.activateApp = async () => {
 
                 window.activeKey = subSnap.id;
                 window.myLeaderName = subData.ownerName || "قائد ميداني";
+                window._leaderSubKey = subSnap.id;
+                window.listenLeaderEmergencies(subSnap.id);
                 return window.launchOS('leader', subSnap.id, "تم التحقق: أهلاً بك أيها القائد");
             }
 
@@ -1712,6 +1714,17 @@ window.renderTeamTable = () => {
     
     // فلترة الأعضاء التابعين لهذا القائد فقط
     const currentTeam = window.teamMembers.filter(m => m.parentKey === targetLeader);
+
+    // تحديث الإحصائيات (يعمل حتى لو الفريق فارغ)
+    const targetSub = (window.subscribers || []).find(s => s.id === targetLeader);
+    const maxM = parseInt(targetSub?.maxMembers || 0);
+    const total = currentTeam.length;
+    const totalEl = document.getElementById('team_stat_total');
+    const activeEl = document.getElementById('team_stat_active');
+    const capacityEl = document.getElementById('team_stat_capacity');
+    if (totalEl) totalEl.textContent = total;
+    if (activeEl) activeEl.textContent = total;
+    if (capacityEl) capacityEl.textContent = Math.max(0, maxM - total);
 
     if (currentTeam.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="2" class="p-10 text-center opacity-30 italic">لا يوجد أعضاء مسجلين في هذا الفريق</td></tr>`;
@@ -4625,7 +4638,7 @@ window.filterSubs = () => {
     const query = document.getElementById('subSearchInput')?.value.trim().toLowerCase() || '';
     const status = document.getElementById('subStatusFilter')?.value || 'all';
     const rows = document.querySelectorAll('#subTableBody tr');
-    let visible = 0;
+    let visible = 0, active = 0, expired = 0;
     rows.forEach(row => {
         const name = row.querySelector('td:first-child')?.textContent?.toLowerCase() || '';
         const isExpired = row.dataset.expired === 'true';
@@ -4635,12 +4648,71 @@ window.filterSubs = () => {
             (status === 'expired' && isExpired);
         row.style.display = (matchName && matchStatus) ? '' : 'none';
         if (matchName && matchStatus) visible++;
+        if (!isExpired) active++; else expired++;
     });
     const empty = document.getElementById('subEmptyMsg');
     if (empty) empty.classList.toggle('hidden', visible > 0);
+    // تحديث الإحصائيات
+    const total = rows.length;
+    const sa = document.getElementById('subs_stat_active');
+    const se = document.getElementById('subs_stat_expired');
+    const st = document.getElementById('subs_stat_total');
+    if (sa) sa.textContent = active;
+    if (se) se.textContent = expired;
+    if (st) st.textContent = total;
 };
 
 
+
+
+// ===== QR Code للمواد =====
+window.generateMaterialQR = (un, name) => {
+    const modal = document.createElement('div');
+    modal.id = 'qrModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.92);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const url = `${location.href.split('?')[0]}?un=${un}`;
+    modal.innerHTML = `
+        <div style="background:linear-gradient(145deg,#0e0b1a,#080814);border:1px solid rgba(139,92,246,0.3);border-radius:2rem;padding:2rem;max-width:340px;width:100%;text-align:center;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+                <button onclick="document.getElementById('qrModal').remove()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.75rem;width:2rem;height:2rem;color:rgba(255,255,255,0.4);cursor:pointer;font-size:0.875rem;">✕</button>
+                <div>
+                    <p style="color:white;font-weight:900;font-size:0.875rem;">QR المادة الخطرة</p>
+                    <p style="color:rgba(139,92,246,0.6);font-size:0.625rem;font-family:monospace;text-transform:uppercase;">Hazmat QR Code</p>
+                </div>
+                <div style="width:2rem;"></div>
+            </div>
+            <div id="qrContainer" style="background:white;border-radius:1rem;padding:1rem;margin-bottom:1rem;display:flex;justify-content:center;"></div>
+            <p style="color:#a78bfa;font-weight:900;font-size:0.875rem;margin-bottom:0.25rem;">${name}</p>
+            <p style="color:rgba(255,255,255,0.4);font-size:0.75rem;font-family:monospace;">UN ${un}</p>
+            <p style="color:rgba(255,255,255,0.2);font-size:0.625rem;margin-top:0.5rem;word-break:break-all;">${url}</p>
+            <button onclick="
+                const img = document.querySelector('#qrContainer img');
+                if (img) {
+                    const a = document.createElement('a');
+                    a.href = img.src;
+                    a.download = 'QR_UN${un}.png';
+                    a.click();
+                }" style="margin-top:1rem;width:100%;padding:0.75rem;border-radius:1rem;background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);color:#a78bfa;font-weight:900;font-size:0.75rem;cursor:pointer;">
+                ⬇️ تحميل QR
+            </button>
+        </div>`;
+    document.body.appendChild(modal);
+
+    // توليد QR باستخدام مكتبة خارجية
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    script.onload = () => {
+        new QRCode(document.getElementById('qrContainer'), {
+            text: url,
+            width: 200,
+            height: 200,
+            colorDark: '#1e1b4b',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    };
+    document.head.appendChild(script);
+};
 
 
 
@@ -4746,7 +4818,11 @@ window.toggleChat = () => {
 // ===== المحادثة الداخلية =====
 window.openChat = () => {
     const win = document.getElementById('winChat');
-    if (win) { win.classList.remove('hidden'); win.classList.add('flex'); }
+    if (win) {
+        win.classList.remove('hidden');
+        win.classList.add('flex');
+        win.style.display = 'flex';
+    }
 
     // إظهار شريط التحكم للمدير فقط
     const masterControls = document.getElementById('masterChatControls');
@@ -4809,12 +4885,17 @@ window.openLeaderChat = (type) => {
         window.loadChatMessages(window.activeSubKey);
     }
 };
+
+
 window.closeChat = () => {
     const win = document.getElementById('winChat');
-    if (win) { win.classList.add('hidden'); win.classList.remove('flex'); }
+    if (win) {
+        win.classList.add('hidden');
+        win.classList.remove('flex');
+        win.style.display = 'none';
+    }
     if (window._chatListener) { window._chatListener(); window._chatListener = null; }
 };
-
 
 window.loadChatMessages = (roomKey = null) => {
     const container = document.getElementById('chatMessages');
@@ -4875,14 +4956,11 @@ window.loadChatMessages = (roomKey = null) => {
                 const isMe = m.senderId === myId;
                 const isNew = m.timestamp > lastSeenTimestamp && !isMe;
                 return `
-                <div class="flex ${isMe ? 'justify-start' : 'justify-end'} mb-3">
-                    <div class="max-w-[75%] ${isMe
-                        ? 'bg-blue-600/30 border border-blue-500/30 rounded-2xl rounded-tl-sm'
-                        : 'bg-white/10 border border-white/10 rounded-2xl rounded-tr-sm'}
-                        ${isNew ? 'ring-1 ring-emerald-500/50' : ''} px-4 py-3">
-                        <p class="text-[10px] font-black ${isMe ? 'text-blue-400' : 'text-slate-400'} mb-1">${m.senderName||'مجهول'}</p>
-                        <p class="text-white text-sm font-bold">${m.text}</p>
-                        <p class="text-[9px] text-slate-600 mt-1 text-left">${new Date(m.timestamp).toLocaleTimeString('ar-SA')}</p>
+                <div class="flex ${isMe ? 'justify-start' : 'justify-end'} items-end gap-2">
+                    <div class="${isMe ? 'chat-bubble-in' : 'chat-bubble-out'} ${isNew ? 'ring-1 ring-emerald-500/40' : ''}">
+                        <p class="text-[10px] font-black ${isMe ? 'text-blue-400' : 'text-emerald-400'} mb-1">${m.senderName||'مجهول'}</p>
+                        <p class="font-bold">${m.text}</p>
+                        <p class="chat-time text-left">${new Date(m.timestamp).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</p>
                     </div>
                 </div>`;
             }).join('');
@@ -5670,6 +5748,46 @@ ${r.notes ? `📝 *ملاحظات:* ${r.notes}` : ''}
 
 
 
+// ===== إشعارات الطوارئ للقائد =====
+window.listenLeaderEmergencies = (subKey) => {
+    try {
+        const q = query(
+            collection(db, 'artifacts', appId, 'public', 'data', 'emergency_reports'),
+            where('parentKey', '==', subKey),
+            where('status', '==', 'new')
+        );
+        onSnapshot(q, snap => {
+            snap.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const d = change.doc.data();
+                    const age = Date.now() - (d.timestamp || 0);
+                    if (age < 30000) { // فقط البلاغات الجديدة خلال 30 ثانية
+                        window.showNotif(`🚨 بلاغ طارئ من ${d.memberName} — ${d.material}`, "error");
+                        // إضافة شارة على زر البلاغات
+                        const badge = document.getElementById('emergencyBadge');
+                        if (badge) { badge.classList.remove('hidden'); }
+                    }
+                }
+            });
+        });
+    } catch(e) { console.warn('Emergency listener failed:', e); }
+};
+
+
+window.openReportOnMap = (index) => {
+    const r = (window.allReports || [])[index];
+    if (!r?.coords) { window.showNotif("لا يوجد موقع لهذا البلاغ", "error"); return; }
+    window.openWin('winMap');
+    setTimeout(() => {
+        if (window.map) {
+            window.map.setView([r.coords.lat, r.coords.lng], 15);
+            window.showNotif(`📍 تم تحديد موقع: ${r.materialName}`, "success");
+        }
+    }, 500);
+};
+
+
+
 // ===== فلترة البلاغات =====
 window.filterReports = () => {
     const search = document.getElementById('repSearchInput')?.value.trim().toLowerCase() || '';
@@ -5697,25 +5815,35 @@ window.filterReports = () => {
         return;
     }
 
-    feed.innerHTML = filtered.map(r => `
-        <div class="glass p-6 rounded-[2rem] border-r-4 ${r.priority === 'high' ? 'border-rose-500' : 'border-emerald-500'} space-y-2">
-            <div class="flex justify-between items-center">
-                <span class="font-black text-white text-lg">${r.materialName || '--'} / UN ${r.un || '--'}</span>
-                <span class="text-xs font-black px-3 py-1 rounded-full ${r.priority === 'high' ? 'bg-rose-600/20 text-rose-400' : 'bg-emerald-600/20 text-emerald-400'}">
-                    ${r.priority === 'high' ? '⚠️ عاجل' : '✅ عادي'}
-                </span>
-            </div>
-            <div class="text-slate-400 text-sm font-bold">👤 ${r.memberName || 'غير معروف'}</div>
-            <div class="text-slate-500 text-xs font-mono">📍 ${r.coords ? r.coords.lat.toFixed(4) + '° / ' + r.coords.lng.toFixed(4) + '°' : 'لا يوجد موقع'}</div>
-            ${r.notes ? `<div class="text-slate-400 text-xs italic">📝 ${r.notes}</div>` : ''}
-<div class="flex justify-between items-center mt-2">
-                <div class="text-slate-600 text-xs">${new Date(r.timestamp).toLocaleString('ar-SA')}</div>
-                <button onclick="window.shareReportWhatsApp(${filtered.indexOf(r)})"
-                    class="text-xs bg-green-600/20 hover:bg-green-600 text-green-400
-                           hover:text-white px-3 py-1 rounded-xl transition-all font-black border
-                           border-green-600/30">
-                    📤 واتساب
-                </button>
+    feed.innerHTML = filtered.map((r, i) => `
+        <div class="rounded-2xl p-4 text-right transition-all" style="background:rgba(255,255,255,0.02); border:1px solid ${r.priority === 'high' ? 'rgba(220,38,38,0.3)' : 'rgba(16,185,129,0.2)'}; border-right:3px solid ${r.priority === 'high' ? '#dc2626' : '#10b981'};">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex gap-2 shrink-0">
+                    <button onclick="window.shareReportWhatsApp(${i})"
+                        class="px-3 py-2 rounded-xl text-[10px] font-black text-emerald-400 transition-all"
+                        style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25);">📤</button>
+                    <button onclick="window.openReportOnMap(${i})"
+                        class="px-3 py-2 rounded-xl text-[10px] font-black text-cyan-400 transition-all"
+                        style="background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.25);">📍</button>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-end gap-2 mb-2">
+                        <span class="text-[10px] font-black px-2 py-0.5 rounded-full" style="${r.priority === 'high' ? 'background:rgba(220,38,38,0.15); color:#f87171;' : 'background:rgba(16,185,129,0.15); color:#34d399;'}">${r.priority === 'high' ? '⚠️ عاجل' : '✅ عادي'}</span>
+                        <p class="text-white font-black text-sm">${r.materialName || '--'} <span class="text-slate-500 font-mono">UN ${r.un || '--'}</span></p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="rounded-xl p-2" style="background:rgba(0,0,0,0.3);">
+                            <p class="text-[9px] text-slate-500 uppercase font-black">العضو</p>
+                            <p class="text-slate-300 text-xs font-bold">👤 ${r.memberName || 'غير معروف'}</p>
+                        </div>
+                        <div class="rounded-xl p-2" style="background:rgba(0,0,0,0.3);">
+                            <p class="text-[9px] text-slate-500 uppercase font-black">الموقع</p>
+                            <p class="text-cyan-400 text-xs font-mono">${r.coords ? r.coords.lat.toFixed(3) + '° / ' + r.coords.lng.toFixed(3) + '°' : '—'}</p>
+                        </div>
+                    </div>
+                    ${r.notes ? `<p class="text-slate-500 text-xs mt-2 italic">📝 ${r.notes}</p>` : ''}
+                    <p class="text-slate-700 text-[10px] mt-2 text-left">${new Date(r.timestamp).toLocaleString('ar-SA')}</p>
+                </div>
             </div>
         </div>
     `).join('');
@@ -6628,6 +6756,45 @@ body.desktop-active {
 }
 
 
+
+
+/* ===== فقاعات الرسائل ===== */
+.chat-bubble-in {
+    background:rgba(37,99,235,0.12); border:1px solid rgba(37,99,235,0.2);
+    border-radius:1.25rem; border-top-right-radius:0.25rem;
+    padding:0.75rem 1rem; max-width:80%; margin-left:auto;
+    color:#e2e8f0; font-size:0.8rem; line-height:1.6; text-align:right;
+}
+.chat-bubble-out {
+    background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2);
+    border-radius:1.25rem; border-top-left-radius:0.25rem;
+    padding:0.75rem 1rem; max-width:80%;
+    color:#d1fae5; font-size:0.8rem; line-height:1.6; text-align:right;
+}
+.chat-time { font-size:0.65rem; color:#475569; margin-top:0.25rem; }
+/* ===== Loading Skeleton ===== */
+@keyframes shimmer {
+    0% { background-position:-200% 0; }
+    100% { background-position:200% 0; }
+}
+.skeleton {
+    background:linear-gradient(90deg,rgba(255,255,255,0.03) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.03) 75%);
+    background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:0.75rem;
+}
+/* ===== Scrollbar ===== */
+.custom-scrollbar::-webkit-scrollbar { width:3px; height:3px; }
+.custom-scrollbar::-webkit-scrollbar-track { background:transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.15); }
+/* ===== Focus States ===== */
+input:focus, select:focus, textarea:focus {
+    border-color:rgba(6,182,212,0.5) !important;
+    box-shadow:0 0 0 3px rgba(6,182,212,0.06) !important;
+}
+
+
+
+
 /* ===== Design System موحد ===== */
 .ds-card { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:1.25rem; padding:1.25rem; }
 .ds-card-emerald { background:rgba(16,185,129,0.06); border-color:rgba(16,185,129,0.18); }
@@ -6753,63 +6920,40 @@ body.desktop-active {
 
 
 
-<div class="glass p-6 md:p-8 rounded-[3rem] md:rounded-[4rem] space-y-6 relative z-[500]">
-                <div class="flex gap-4">
-                    <div class="flex-1 relative group">
-                        <input type="text" id="sInput" oninput="window.handleSearch()" placeholder="ابحث برقم UN أو اسم المادة..." 
-                               class="w-full bg-black/60 p-5 md:p-7 rounded-[2rem] md:rounded-[2.5rem] border border-white/10 text-white text-xl md:text-2xl italic outline-none focus:border-blue-600 pr-16 shadow-inner transition-all">
-                        <button onclick="window.startVoiceRec()" class="absolute left-6 top-1/2 -translate-y-1/2 text-2xl md:text-3xl hover:scale-125 transition-all">🎤</button>
-                    </div>
-                </div>
-                <div id="drop" class="hidden absolute left-0 right-0 top-full mt-4 glass rounded-[2rem] border border-white/10 shadow-3xl max-h-96 overflow-y-auto z-[1000] backdrop-blur-3xl p-4"></div>
-
-<div class="flex flex-wrap gap-4 justify-center mt-4">
-                    <div class="flex flex-wrap gap-3 justify-center mt-4">
-    <button onclick="window.clearSearch()"
-        class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-               bg-rose-600/20 text-rose-500 hover:bg-rose-600 hover:text-white transition-all">
-        🗑️ مسح
-    </button>
-    <button onclick="window.setSearchMode('un')"
-        class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-               bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all">
-        🔢 بحث UN
-    </button>
-    <button onclick="window.setSearchMode('name')"
-        class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-               bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600 hover:text-white transition-all">
-        🔤 بحث الاسم
-    </button>
-    <button onclick="window.setSearchMode('class')"
-        class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-               bg-orange-600/20 text-orange-400 hover:bg-orange-600 hover:text-white transition-all">
-        ⚠️ بحث التصنيف
-    </button>
-    <button onclick="window.setSearchMode('cas')"
-        class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-               bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white transition-all">
-        🧪 بحث CAS
-    </button>
-
-
-<button onclick="window.openBarcodeScanner()"
-    class="px-6 py-3 rounded-2xl border border-white/10 font-black italic
-           bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600 hover:text-white transition-all">
-    📷 مسح Barcode
-</button>
-
-
+<div class="px-6 py-5 shrink-0" style="border-bottom:1px solid rgba(6,182,212,0.1);">
+    <div class="relative flex items-center gap-3 mb-4">
+        <button onclick="window.openBarcodeScanner()"
+            class="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-xl transition-all hover:scale-105"
+            style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">📷</button>
+        <div class="flex-1 relative">
+            <input type="text" id="sInput" oninput="window.handleSearch()"
+                placeholder="ابحث برقم UN أو اسم المادة..."
+                class="w-full border border-white/10 rounded-2xl py-3.5 pr-5 pl-14 text-white text-sm font-bold outline-none transition-all text-right"
+                style="background:rgba(0,0,0,0.5);">
+            <button onclick="window.startVoiceRec()"
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-xl hover:scale-125 transition-all">🎤</button>
+        </div>
+        <button onclick="window.clearSearch()"
+            class="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-lg transition-all hover:scale-105"
+            style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.25); color:#f43f5e;">🗑️</button>
+    </div>
+    <div class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width:none;">
+        <button onclick="window.setSearchMode('un')" class="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all" style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25); color:#60a5fa;">🔢 رقم UN</button>
+        <button onclick="window.setSearchMode('name')" class="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25); color:#22d3ee;">🔤 الاسم</button>
+        <button onclick="window.setSearchMode('class')" class="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.25); color:#fbbf24;">⚠️ التصنيف</button>
+        <button onclick="window.setSearchMode('cas')" class="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all" style="background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.25); color:#a78bfa;">🧪 رقم CAS</button>
+    </div>
+    <div id="drop" class="hidden absolute left-0 right-0 mt-2 rounded-2xl border border-white/10 shadow-2xl max-h-80 overflow-y-auto z-[1000] custom-scrollbar p-3" style="background:rgba(8,11,18,0.98); backdrop-filter:blur(20px);"></div>
 </div>
 
-                </div>
-            </div>
+
 
 
 
 <div id="materialContentArea" class="flex-1">
                 <div id="resView" class="hidden space-y-10 pb-20 animate-in slide-in-from-bottom-10 duration-700">
                     
-                    <div class="p-8 md:p-12 rounded-[4rem] md:rounded-[5.5rem] glass border-t-[15px] border-rose-600 shadow-2xl relative overflow-hidden">
+<div class="rounded-2xl relative overflow-hidden" style="background:rgba(0,0,0,0.4); border:1px solid rgba(220,38,38,0.25); border-top:3px solid #dc2626;">
                         <div class="flex flex-col lg:flex-row gap-10 items-center justify-between relative z-10">
                             <div class="text-right flex-1 w-full">
                                 <div id="resForm" class="text-2xl md:text-3xl font-black text-blue-400 mb-2 tracking-[0.2em] uppercase italic">--</div>
@@ -8128,27 +8272,49 @@ body.desktop-active {
     </div>
 </div>
 
-<div id="winSubs" class="app-window bg-[#0a0a0f] text-right" style="padding:0;">
+<div id="winSubs" class="app-window bg-[#080b12] text-right" style="padding:0;">
     <div class="w-full h-full flex flex-col">
 
-        <!-- شريط العنوان العلوي -->
-        <div class="flex items-center justify-between px-6 py-3 border-b border-white/5" style="background:rgba(220,38,38,0.07);">
-            <div class="flex items-center gap-4">
-                <div class="w-2 h-6 rounded-full bg-rose-500"></div>
-                <h2 class="text-sm font-black text-white uppercase tracking-widest">إدارة القادة السياديين</h2>
-                <span id="subsCount" class="text-[10px] bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full font-black">0 قائد</span>
-            </div>
-            <div class="flex items-center gap-3">
-                <input type="text" id="subSearchInput" oninput="window.filterSubs()"
-                    placeholder="🔍 بحث..." dir="rtl"
-                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-rose-500 w-32">
+        <!-- شريط العنوان -->
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(220,38,38,0.1),transparent); border-bottom:1px solid rgba(220,38,38,0.12);">
+            <div class="flex items-center gap-2">
+                <button onclick="window.closeWin('winSubs')" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+                <input type="text" id="subSearchInput" oninput="window.filterSubs()" placeholder="بحث..." dir="rtl"
+                    class="border border-white/10 rounded-xl px-3 py-1.5 text-white text-xs outline-none transition-all w-32"
+                    style="background:rgba(0,0,0,0.4);">
                 <select id="subStatusFilter" onchange="window.filterSubs()"
-                    class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs outline-none focus:border-rose-500">
+                    class="border border-white/10 rounded-xl px-3 py-1.5 text-white text-xs outline-none transition-all"
+                    style="background:rgba(0,0,0,0.4);">
                     <option value="all">الكل</option>
                     <option value="active">✅ نشط</option>
                     <option value="expired">⛔ منتهي</option>
                 </select>
-                <button onclick="window.closeWin('winSubs')" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/50 hover:text-rose-400 transition-all text-sm flex items-center justify-center">✕</button>
+            </div>
+            <div class="flex items-center gap-4">
+                <div>
+                    <div class="flex items-center gap-2 justify-end">
+                        <p class="text-white font-black text-sm uppercase tracking-wider">إدارة القادة السياديين</p>
+                        <span id="subsCount" class="text-[10px] bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full font-black">0 قائد</span>
+                    </div>
+                    <p class="text-rose-400/50 text-[10px] font-mono uppercase tracking-widest">Sovereign Leaders Management</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(220,38,38,0.12); border:1px solid rgba(220,38,38,0.25);">🎖️</div>
+            </div>
+        </div>
+
+        <!-- إحصائيات سريعة -->
+        <div class="grid grid-cols-3 gap-3 px-6 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                <p id="subs_stat_active" class="text-2xl font-black text-emerald-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">✅ نشطون</p>
+            </div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
+                <p id="subs_stat_expired" class="text-2xl font-black text-rose-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">⛔ منتهون</p>
+            </div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+                <p id="subs_stat_total" class="text-2xl font-black text-amber-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">👥 الإجمالي</p>
             </div>
         </div>
 
@@ -8262,75 +8428,80 @@ body.desktop-active {
 
 
 
-<div id="winTeam" class="app-window bg-[#0a0a0f] text-right" style="padding:0;">
+<div id="winTeam" class="app-window bg-[#080b12] text-right" style="padding:0;">
     <div class="w-full h-full flex flex-col">
-
-        <!-- شريط العنوان -->
-        <div class="flex items-center justify-between px-6 py-3 border-b border-white/5 shrink-0" style="background:rgba(79,70,229,0.07);">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(99,102,241,0.1),transparent); border-bottom:1px solid rgba(99,102,241,0.12);">
+            <button onclick="window.closeTeamWin()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
             <div class="flex items-center gap-4">
-                <div class="w-2 h-6 rounded-full bg-indigo-500"></div>
-                <h2 id="teamWinTitle" class="text-sm font-black text-white uppercase tracking-widest">إدارة الفريق</h2>
+                <div>
+                    <p id="teamWinTitle" class="text-white font-black text-sm uppercase tracking-wider">إدارة الفريق</p>
+                    <p class="text-indigo-400/50 text-[10px] font-mono uppercase tracking-widest">Team Management</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.25);">👥</div>
             </div>
-            <button onclick="window.closeTeamWin()" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-indigo-500/20 text-white/50 hover:text-indigo-400 transition-all text-sm flex items-center justify-center">✕</button>
         </div>
-
+        <div class="grid grid-cols-3 gap-3 px-6 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                <p id="team_stat_active" class="text-2xl font-black text-emerald-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">✅ نشطون</p>
+            </div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2);">
+                <p id="team_stat_total" class="text-2xl font-black text-indigo-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">👥 الإجمالي</p>
+            </div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+                <p id="team_stat_capacity" class="text-2xl font-black text-amber-400">0</p>
+                <p class="text-[10px] text-slate-500 font-black uppercase mt-1">📊 المتبقي</p>
+            </div>
+        </div>
         <div class="flex flex-col flex-1 overflow-hidden p-4 gap-3">
-
-            <!-- فلتر القائد للمدير -->
             <div id="leaderFilterRow" class="hidden shrink-0">
                 <select id="leaderFilterSelect" onchange="window.filterTeamByLeader()"
-                    class="w-full border border-indigo-500/40 rounded-lg px-3 py-2 text-white text-xs font-bold outline-none focus:border-indigo-500 text-right"
-                    style="background:#1e1b3a; color:white;">
-                    <option value="" style="background:#1e1b3a; color:#a5b4fc;">-- اختر قائداً لعرض فريقه --</option>
+                    class="w-full border border-indigo-500/30 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none focus:border-indigo-500 text-right"
+                    style="background:rgba(0,0,0,0.4);">
+                    <option value="">-- اختر قائداً لعرض فريقه --</option>
                 </select>
             </div>
-
-            <!-- نموذج إضافة عضو -->
-            <div class="rounded-xl border border-indigo-500/20 p-3 shrink-0" style="background:rgba(79,70,229,0.05);">
+            <div class="rounded-2xl p-4 shrink-0" style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.18);">
+                <p class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-3">➕ إضافة / تعديل عضو</p>
                 <div class="flex gap-2 items-end">
                     <div class="flex-1">
-                        <p class="text-[9px] text-slate-500 mb-1 font-black uppercase">اسم العضو</p>
-                        <input type="text" id="new_mn" placeholder="الاسم الكامل"
-                            class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white text-xs outline-none focus:border-indigo-500 text-right">
+                        <p class="text-[9px] text-slate-500 mb-1.5 font-black uppercase">الاسم الكامل</p>
+                        <input type="text" id="new_mn" placeholder="اسم العضو..."
+                            class="w-full border border-white/10 rounded-xl p-3 text-white text-xs outline-none focus:border-indigo-500 text-right transition-all"
+                            style="background:rgba(0,0,0,0.4);">
                     </div>
                     <div class="flex-1">
-                        <p class="text-[9px] text-slate-500 mb-1 font-black uppercase">كود العضو</p>
+                        <p class="text-[9px] text-slate-500 mb-1.5 font-black uppercase">كود العضو</p>
                         <div class="relative">
                             <input type="text" id="new_mk" placeholder="MEM-XXXXXX"
-                                class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white text-xs font-mono uppercase outline-none focus:border-indigo-500">
-                            <button onclick="window.genMemberKey('new_mk')"
-                                class="absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-400 text-xs">⚡</button>
+                                class="w-full border border-white/10 rounded-xl p-3 text-white text-xs font-mono uppercase outline-none focus:border-indigo-500 transition-all"
+                                style="background:rgba(0,0,0,0.4);">
+                            <button onclick="window.genMemberKey('new_mk')" class="absolute left-2 top-1/2 -translate-y-1/2 text-indigo-400 text-sm hover:scale-125 transition-all">⚡</button>
                         </div>
                     </div>
-                    <button id="addMemBtn" onclick="window.addNewMember()"
-                        class="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white text-xs font-black transition-all whitespace-nowrap">
-                        ✅ اعتماد
-                    </button>
-                    <button id="updateMemBtn" onclick="window.updateMember()"
-                        class="hidden py-2 px-4 bg-amber-600 hover:bg-amber-500 rounded-lg text-white text-xs font-black transition-all whitespace-nowrap">
-                        🔄 تحديث
-                    </button>
+                    <div class="flex flex-col gap-2">
+                        <button id="addMemBtn" onclick="window.addNewMember()" class="py-3 px-4 rounded-xl text-white text-xs font-black transition-all active:scale-95" style="background:rgba(16,185,129,0.8);">✅ اعتماد</button>
+                        <button id="updateMemBtn" onclick="window.updateMember()" class="hidden py-3 px-4 rounded-xl text-white text-xs font-black transition-all active:scale-95" style="background:rgba(245,158,11,0.8);">🔄 تحديث</button>
+                    </div>
                 </div>
             </div>
-
-            <!-- جدول الأعضاء -->
-            <div class="flex-1 rounded-xl border border-white/5 overflow-hidden" style="background:rgba(255,255,255,0.02);">
-                <div class="overflow-y-auto h-full custom-scrollbar">
+            <div class="flex-1 rounded-2xl border border-white/5 overflow-hidden" style="background:rgba(255,255,255,0.01);">
+                <div class="grid grid-cols-2 px-4 py-2.5 sticky top-0" style="background:#0d1117; border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <p class="text-slate-500 font-black text-[10px] uppercase text-right">اسم العضو</p>
+                    <p class="text-slate-500 font-black text-[10px] uppercase text-center">إجراءات</p>
+                </div>
+                <div class="overflow-y-auto custom-scrollbar" style="height:calc(100% - 36px);">
                     <table class="w-full text-right border-collapse text-xs">
-                    <thead class="sticky top-0 border-b border-white/5" style="background:#0f0f18;">
-                        <tr>
-                            <th class="px-4 py-2.5 text-right text-slate-500 font-black uppercase text-[10px]">اسم العضو</th>
-                            <th class="px-4 py-2.5 text-center text-slate-500 font-black uppercase text-[10px]">إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="teamGridBody" class="text-white divide-y divide-white/5"></tbody>
-                </table>
+                        <tbody id="teamGridBody" class="text-white divide-y divide-white/5"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
-
-            </div>
-        </div>
+    </div>
 </div>
+
+
 
 
 <div id="winReports" class="app-window bg-[#080b12] text-right" style="padding:0;">
@@ -8757,12 +8928,14 @@ body.desktop-active {
         <h4 class="text-violet-400 font-black text-sm mb-4 uppercase">📈 نشاط آخر 7 أيام</h4>
         <canvas id="chartBar" width="400" height="220"></canvas>
     </div>
+</div>
         </div>
         </div>
     </div>
 </div>
 
 <!-- مؤشر تحميل البيانات -->
+
 <div id="syncLoader" class="hidden fixed bottom-24 left-1/2 -translate-x-1/2 z-[400000]
      bg-slate-900/95 border border-cyan-500/30 rounded-2xl px-8 py-4
      flex items-center gap-4 shadow-2xl backdrop-blur-xl">
@@ -9074,57 +9247,43 @@ body.desktop-active {
 
 
 <!-- نافذة المحادثة الداخلية -->
-<div id="winChat" class="hidden fixed inset-0 z-[500000] bg-black/95 flex-col" style="backdrop-filter:blur(20px)">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0" style="background:rgba(255,255,255,0.02);">
-        <button onclick="window.closeChat()" class="text-white/40 hover:text-white transition-all text-xl">✕</button>
+<div id="winChat" class="hidden fixed inset-0 z-[500000] flex-col" style="background:rgba(5,7,14,0.97); backdrop-filter:blur(24px);">
+    <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(37,99,235,0.1),transparent); border-bottom:1px solid rgba(37,99,235,0.1);">
+        <button onclick="window.closeChat()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
         <div class="text-center">
             <p id="chatRoomTitle" class="text-white font-black text-sm">💬 القناة الداخلية</p>
-            <p class="text-[10px] text-slate-600 font-black uppercase tracking-widest">ERG SYSTEM</p>
+            <p class="text-[10px] text-blue-500/50 font-mono uppercase tracking-widest">ERG Secure Channel</p>
         </div>
-        <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+        <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span class="text-emerald-400/60 text-[10px] font-black uppercase">Live</span>
+        </div>
     </div>
-    <!-- شريط اختيار المستلم للمدير -->
-    <div id="masterChatControls" class="hidden px-4 py-2 border-b border-white/5 shrink-0" style="background:rgba(255,255,255,0.02);">
+    <div id="masterChatControls" class="hidden px-4 py-3 shrink-0" style="background:rgba(0,0,0,0.3); border-bottom:1px solid rgba(255,255,255,0.05);">
         <div class="flex gap-2 items-center">
+            <button onclick="window.sendMaintenanceAlert()" class="shrink-0 px-3 py-2 rounded-xl text-[10px] font-black text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 transition-all" style="background:rgba(245,158,11,0.05);">🔧 صيانة</button>
             <select id="chatTargetSelect" onchange="window.switchChatRoom()"
-                class="flex-1 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-blue-500 text-right"
-                style="background:#1a1a2e;">
+                class="flex-1 border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-bold outline-none text-right transition-all"
+                style="background:rgba(0,0,0,0.5);">
                 <option value="MASTER_BROADCAST">📢 جميع القادة (بث عام)</option>
             </select>
-            <button onclick="window.sendMaintenanceAlert()"
-                class="px-3 py-1.5 rounded-lg text-[10px] font-black text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 transition-all whitespace-nowrap"
-                style="background:rgba(245,158,11,0.05);">
-                🔧 تنبيه صيانة
-            </button>
         </div>
     </div>
-
-    <!-- تبويبات القناة للقائد فقط -->
     <div id="leaderChatTabs" class="hidden px-4 py-2 gap-2 shrink-0" style="background:rgba(0,0,0,0.3); border-bottom:1px solid rgba(255,255,255,0.06);">
-        <button id="leaderChatTabBroadcast" onclick="window.openLeaderChat('broadcast')"
-            class="flex-1 py-2 rounded-xl text-xs font-black transition-all"
-            style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.3);">
-            📢 رسائل المدير
-        </button>
-        <button id="leaderChatTabTeam" onclick="window.openLeaderChat('team')"
-            class="flex-1 py-2 rounded-xl text-xs font-black transition-all"
-            style="background:transparent; color:#6b7280; border:1px solid rgba(255,255,255,0.08);">
-            👥 فريقي
-        </button>
+        <button id="leaderChatTabBroadcast" onclick="window.openLeaderChat('broadcast')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all" style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.3);">📢 رسائل المدير</button>
+        <button id="leaderChatTabTeam" onclick="window.openLeaderChat('team')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all" style="background:transparent; color:#6b7280; border:1px solid rgba(255,255,255,0.08);">👥 فريقي</button>
     </div>
-    <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-1 custom-scrollbar"></div>
-    <div class="px-4 pb-4 pt-2 shrink-0 border-t border-white/5 flex gap-3 items-center">
-        <button onclick="window.sendChatMessage()"
-            class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all hover:scale-105"
-            style="background:rgba(37,99,235,0.3);border:1px solid rgba(37,99,235,0.4);">
-            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
-            </svg>
-        </button>
-        <input id="chatInput" type="text" placeholder="اكتب رسالة..."
-            dir="rtl"
-            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-blue-500/50 placeholder-slate-600 font-bold transition-all"
-            onkeydown="if(event.key==='Enter') window.sendChatMessage()">
+    <div id="chatMessages" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar"></div>
+    <div class="px-4 py-4 shrink-0" style="background:rgba(0,0,0,0.4); border-top:1px solid rgba(255,255,255,0.05);">
+        <div class="flex gap-3 items-center">
+            <button onclick="window.sendChatMessage()" class="shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95" style="background:linear-gradient(135deg,#1d4ed8,#2563eb); box-shadow:0 4px 15px rgba(37,99,235,0.3);">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
+            </button>
+            <input id="chatInput" type="text" placeholder="اكتب رسالتك..." dir="rtl"
+                onkeydown="if(event.key==='Enter') window.sendChatMessage()"
+                class="flex-1 border border-white/10 rounded-2xl px-5 py-3 text-white text-sm outline-none transition-all text-right font-bold placeholder-slate-600"
+                style="background:rgba(255,255,255,0.04);">
+        </div>
     </div>
 </div>
 
