@@ -10,8 +10,46 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ERG SYSTEM">
-<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiRVJHIFNZU1RFTSIsInNob3J0X25hbWUiOiJFUkciLCJzdGFydF91cmwiOiIuLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwMDAwMDAiLCJ0aGVtZV9jb2xvciI6IiMwMDAwMDAiLCJpY29ucyI6W3sic3JjIjoiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMTY4MC8xNjgwNzg0LnBuZyIsInNpemVzIjoiNTEyeDUxMiIsInR5cGUiOiJpbWFnZS9wbmcifV19">
-
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiRVJHIFNZU1RFTSIsInNob3J0X25hbWUiOiJFUkciLCJzdGFydF91cmwiOiIuLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwMDAwMDAiLCJ0aGVtZV9jb2xvciI6IiMxMGI5ODEiLCJpY29ucyI6W3sic3JjIjoiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsYXRpY29uLmNvbS81MTIvMTY4MC8xNjgwNzg0LnBuZyIsInNpemVzIjoiNTEyeDUxMiIsInR5cGUiOiJpbWFnZS9wbmcifV19">
+<script>
+// ===== Service Worker للعمل بدون إنترنت =====
+if ('serviceWorker' in navigator) {
+    const swCode = `
+const CACHE = 'erg-v1';
+const ASSETS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdn.tailwindcss.com',
+    'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js',
+    'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js',
+    'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js'
+];
+self.addEventListener('install', e => {
+    e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {})));
+    self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+    self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+        if (res && res.status === 200 && e.request.method === 'GET') {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+    }).catch(() => caches.match(e.request))));
+});
+`;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).then(reg => {
+        console.log('✅ ERG Service Worker registered');
+    }).catch(e => console.warn('SW registration failed:', e));
+}
+</script>
     <title>ERG-منصة الاستجابة الطارئة</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
@@ -29,6 +67,12 @@
         document.getElementById('entryOptions')?.classList.add('hidden');
         document.getElementById('loginFields')?.classList.remove('hidden');
         document.getElementById('subFields')?.classList.add('hidden');
+
+        // إعادة ضبط حالة اختيار النوع كل مرة تُفتح الشاشة من جديد
+        window._loginType = null;
+        document.getElementById('codeInputWrap')?.classList.add('hidden');
+        document.getElementById('loginActionBtns')?.classList.add('hidden');
+        document.getElementById('loginTypeSelector')?.classList.remove('hidden');
     };
 
     window.showSubscriptionDetails = () => {
@@ -41,6 +85,55 @@
         document.getElementById('entryOptions')?.classList.remove('hidden');
         document.getElementById('loginFields')?.classList.add('hidden');
         document.getElementById('subFields')?.classList.add('hidden');
+        document.getElementById('trialFields')?.classList.add('hidden');
+        window._loginType = null;
+        document.getElementById('codeInputWrap')?.classList.add('hidden');
+        document.getElementById('loginActionBtns')?.classList.add('hidden');
+        document.getElementById('loginTypeSelector')?.classList.remove('hidden');
+        const msgLabel = document.getElementById('loginMsg');
+        if (msgLabel) msgLabel.innerText = '';
+    };
+
+    window.selectLoginType = (type) => {
+        window._loginType = type;
+
+        ['leader', 'member', 'admin'].forEach(t => {
+            const btn = document.getElementById('loginTypeBtn_' + t);
+            if (btn) btn.style.outline = (t === type) ? '2px solid white' : 'none';
+        });
+
+        document.getElementById('codeInputWrap')?.classList.remove('hidden');
+        document.getElementById('loginActionBtns')?.classList.remove('hidden');
+
+        const prefixRow = document.getElementById('prefixedInputRow');
+        const passwordInput = document.getElementById('activationInput');
+        const prefixLabel = document.getElementById('codePrefixLabel');
+        const suffixInput = document.getElementById('activationInputSuffix');
+
+        if (type === 'admin') {
+            // الإدارة: أظهر OTP الأول قبل حقل الرمز
+            if (window.AUTH_APP_ENABLED) {
+                window._adminOtpPhase = 1;
+                const otpTitle = document.getElementById('otpModalTitle');
+                const otpSub = document.getElementById('otpModalSubtitle');
+                if (otpTitle) otpTitle.textContent = '🔐 التحقق الأول';
+                if (otpSub) otpSub.textContent = 'أدخل كود Google Authenticator للمتابعة';
+                document.getElementById('otpInput').value = '';
+                document.getElementById('otpModal').classList.replace('hidden', 'flex');
+                return;
+            }
+            // إذا كانت المصادقة معطلة: أظهر حقل الرمز مباشرة
+            prefixRow?.classList.add('hidden');
+            passwordInput?.classList.remove('hidden');
+            if (passwordInput) passwordInput.value = '';
+        } else {
+            // قائد أو عضو: بادئة ثابتة + حقل لاحقة
+            passwordInput?.classList.add('hidden');
+            prefixRow?.classList.remove('hidden');
+            if (prefixLabel) prefixLabel.textContent = (type === 'leader') ? 'LDR-' : 'MEM-';
+            if (suffixInput) suffixInput.value = '';
+            suffixInput?.focus();
+        }
     };
 
 </script>
@@ -67,7 +160,8 @@ const appId = "erg2024";
 // --- المتغيرات الأمنية الجديدة للمنظومة ---
 let MASTER_HASH = ""; 
 let MASTER_SALT = ""; 
-let AUTH_APP_ENABLED = true; 
+window.AUTH_APP_ENABLED = true;
+window._adminOtpPhase = 0; 
 let MASTER_TOTP_SECRET = "MZXW6YTBHJSG65DS";
 // ===== إعدادات EmailJS =====
 const EMAILJS_SERVICE_ID = "service_994erg";
@@ -103,7 +197,11 @@ function generateRandomTOTPSecret() {
 
 // --- دالة التشفير المساعدة ---
 async function hashInput(text, salt) {
-    if (!salt) return text; 
+    if (!salt) {
+        // عدم وجود salt يعني فشل تحميل إعدادات الأمان — لا نُعيد النص الخام أبداً
+        console.error("hashInput: MASTER_SALT غير محمّل، رفض العملية للأمان");
+        return "__SALT_NOT_LOADED__" + Math.random();
+    }
     const encoder = new TextEncoder();
     const data = encoder.encode(text + salt);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -370,23 +468,57 @@ window.closeOrderTracking = () => {
 
 // --- محرك الإدارة والاستجابة المدمج (محدث لدعم التشفير) ---
 window.changeUserKey = (type, oldDocId) => {
+    // القائد يغير شفرة عضوه — مرة واحدة فقط بدون OTP
+    if (window.userRole === 'leader' && type === 'member') {
+        const countKey = `key_change_count_${oldDocId}`;
+        const used = parseInt(localStorage.getItem(countKey) || '0');
+        if (used >= 1) {
+            window.showNotif("⛔ لقد نفّذت حقك بتغيير الشفرة — يرجى التواصل مع الدعم والصيانة", "error");
+            return;
+        }
+    }
+
+    // فتح النافذة
     const modal = document.getElementById('changeKeyModal');
     if (!modal) return;
-
     modal.style.display = 'flex';
-    const input = document.getElementById('changeKeyInput');
-    if (input) { input.value = ''; input.focus(); }
+    window._changeKeyContext = { type, oldDocId, isLeaderChange: window.userRole === 'leader' && type === 'member' };
 
-    window._changeKeyContext = { type, oldDocId };
+    // تحديد البادئة حسب النوع
+    const prefix = type === 'sub' ? 'LDR-' : 'MEM-';
+    const prefixEl = document.getElementById('changeKeyPrefix');
+    if (prefixEl) prefixEl.textContent = prefix;
+
+    // تفريغ الحقول
+    const suffix = document.getElementById('changeKeySuffix');
+    const preview = document.getElementById('changeKeyPreview');
+    const hidden = document.getElementById('changeKeyInput');
+    if (suffix) { suffix.value = ''; suffix.focus(); }
+    if (preview) preview.textContent = prefix + 'XXXXXX';
+    if (hidden) hidden.value = '';
 };
+
+window._updateFullKey = () => {
+    const ctx = window._changeKeyContext;
+    const prefix = ctx?.type === 'sub' ? 'LDR-' : 'MEM-';
+    const suffix = document.getElementById('changeKeySuffix')?.value.toUpperCase().trim() || '';
+    const full = prefix + suffix;
+    const preview = document.getElementById('changeKeyPreview');
+    if (preview) preview.textContent = suffix ? full : prefix + 'XXXXXX';
+    const hidden = document.getElementById('changeKeyInput');
+    if (hidden) hidden.value = full;
+};
+
 
 window.confirmChangeKey = async () => {
     const ctx = window._changeKeyContext;
     if (!ctx) return;
 
-    const input = document.getElementById('changeKeyInput');
-    const newPlainKey = input ? input.value.trim() : '';
-    if (!newPlainKey) return window.showNotif("أدخل الشفرة الجديدة أولاً", "error");
+    const suffix = document.getElementById('changeKeySuffix')?.value.trim();
+    if (!suffix) return window.showNotif("أدخل الجزء الجديد من الشفرة أولاً", "error");
+    const prefix = ctx.type === 'sub' ? 'LDR-' : 'MEM-';
+    const newPlainKey = prefix + suffix.toUpperCase();
+
 
     window.closeChangeKeyModal();
 
@@ -419,6 +551,10 @@ window.confirmChangeKey = async () => {
         }
 
         window.showNotif("تم تغيير وتشفير الشفرة بنجاح 🔒", "success");
+        // تسجيل استخدام القائد لحق التغيير
+        if (ctx.isLeaderChange) {
+            localStorage.setItem(`key_change_count_${ctx.oldDocId}`, '1');
+        }
 
     } catch (e) {
         window.showNotif("فشل في تغيير الشفرة", "error");
@@ -669,6 +805,7 @@ window.requestTrial = async () => {
             if (d.status === 'active' && d.expiryDate > Date.now()) {
                 const daysLeft = Math.ceil((d.expiryDate - Date.now()) / (1000*60*60*24));
                 window.activeKey = phoneHash;
+                window.listenMasterBroadcast?.();
                 window.isTrial = true;
                 window.trialDaysLeft = daysLeft;
                 return window.launchOS('leader', phoneHash, `مرحباً ${name} — تجربتك نشطة (${daysLeft} أيام متبقية)`);
@@ -742,9 +879,20 @@ window.rejectTrialByAdmin = async (phoneHash, name) => {
 };
 
 window.activateApp = async () => {
-    const key = document.getElementById('activationInput').value.trim();
+    const loginType = window._loginType;
+    if (!loginType) return;
+
+    let key = "";
+    if (loginType === 'admin') {
+        key = document.getElementById('activationInput').value.trim();
+    } else {
+        const suffix = document.getElementById('activationInputSuffix').value.trim();
+        if (!suffix) return;
+        const prefix = (loginType === 'leader') ? 'LDR-' : 'MEM-';
+        key = prefix + suffix;
+    }
+
     const msgLabel = document.getElementById('loginMsg'); 
-    
     if(!key) return;
 
     // مؤشر تحميل على الزر
@@ -757,78 +905,134 @@ window.activateApp = async () => {
     }
 
     try {
-        // 1. التحقق الآمن للمدير الأعلى
-        let inputHash = "";
-        const saltExists = typeof MASTER_SALT !== 'undefined' && MASTER_SALT !== "";
-        const hashExists = typeof MASTER_HASH !== 'undefined' && MASTER_HASH !== "";
+        // === مسار الإدارة فقط ===
+        if (loginType === 'admin') {
+            let inputHash = "";
+            const saltExists = typeof MASTER_SALT !== 'undefined' && MASTER_SALT !== "";
+            const hashExists = typeof MASTER_HASH !== 'undefined' && MASTER_HASH !== "";
 
-        if (saltExists) {
-            inputHash = await hashInput(key, MASTER_SALT);
-        }
-
-        if (hashExists && inputHash === MASTER_HASH) {
-            const isAuthEnabled = typeof AUTH_APP_ENABLED !== 'undefined' ? AUTH_APP_ENABLED : false;
-            
-            if (isAuthEnabled) {
-                document.getElementById('otpModal').classList.replace('hidden', 'flex');
-            } else {
-                return window.launchOS('master', 'MASTER_SESSION', "دخول المدير الأعلى للمنظومة");
+            if (saltExists) {
+                inputHash = await hashInput(key, MASTER_SALT);
             }
+
+            if (!saltExists || !hashExists) {
+                if(msgLabel) msgLabel.innerText = "⏳ يرجى الانتظار، جاري تحميل إعدادات الأمان...";
+                window.showNotif("النظام لم يكتمل تحميله بعد، أعد المحاولة بعد ثانية", "error");
+                if (loginBtn) { loginBtn.textContent = 'دخول ←'; loginBtn.removeAttribute('disabled'); }
+                return;
+            }
+
+            if (inputHash === MASTER_HASH) {
+                const isAuthEnabled = window.AUTH_APP_ENABLED || false;
+                if (isAuthEnabled) {
+                    window._adminOtpPhase = 2;
+                    const otpTitle = document.getElementById('otpModalTitle');
+                    const otpSub = document.getElementById('otpModalSubtitle');
+                    if (otpTitle) otpTitle.textContent = '🛡️ التحقق النهائي';
+                    if (otpSub) otpSub.textContent = 'أدخل كود Google Authenticator للدخول النهائي';
+                    document.getElementById('otpInput').value = '';
+                    document.getElementById('otpModal').classList.replace('hidden', 'flex');
+                } else {
+                    return window.launchOS('master', 'MASTER_SESSION', "دخول الدعم والصيانة - الإدارة");
+                }
+                return;
+            }
+
+            if(msgLabel) msgLabel.innerText = "⛔ كود الإدارة غير صحيح";
+            window.showNotif("كود الإدارة غير صحيح", "error");
+            if (loginBtn) { loginBtn.textContent = 'دخول ←'; loginBtn.removeAttribute('disabled'); }
             return;
         }
 
-        // 2. فحص كود القائد (Leader) المدمج (مشفر + قديم)
-        let subRef = doc(db, 'artifacts', appId, 'public', 'data', 'subscribers', inputHash || "NO_HASH");
-        let subSnap = await getDoc(subRef);
-        
-        if(!subSnap.exists()) {
-            subRef = doc(db, 'artifacts', appId, 'public', 'data', 'subscribers', key);
-            subSnap = await getDoc(subRef);
-        }
- 
+        // === مسار القائد فقط ===
+        if (loginType === 'leader') {
+            const inputHash = await hashInput(key, MASTER_SALT);
+            let subRef = doc(db, 'artifacts', appId, 'public', 'data', 'subscribers', inputHash || "NO_HASH");
+            let subSnap = await getDoc(subRef);
 
-if(subSnap.exists()){
-            const subData = subSnap.data();
-            if (!subData.isPaid || subData.status !== 'active') {
-                if(msgLabel) msgLabel.innerText = "⛔ الاشتراك غير مفعل. تواصل مع المدير.";
-                window.showNotif("⛔ الاشتراك غير مفعل أو منتهي", "error");
-                return;
+            if(!subSnap.exists()) {
+                subRef = doc(db, 'artifacts', appId, 'public', 'data', 'subscribers', key);
+                subSnap = await getDoc(subRef);
             }
-            window.activeKey = subSnap.id;
-            window.myLeaderName = subData.ownerName || "قائد ميداني";
-            return window.launchOS('leader', subSnap.id, "تم التحقق: أهلاً بك أيها القائد");
+
+            if(subSnap.exists()){
+                const subData = subSnap.data();
+                if (!subData.isPaid || subData.status !== 'active') {
+                    if(msgLabel) msgLabel.innerText = "⛔ الاشتراك غير مفعل. تواصل مع المدير.";
+                    window.showNotif("⛔ الاشتراك غير مفعل أو منتهي", "error");
+                    return;
+                }
+
+                // فحص بصمة الجهاز — يسمح بحد أقصى جهازين لكل قائد
+                const myDeviceId = getDeviceId();
+                const registeredDevices = Array.isArray(subData.deviceIds) ? subData.deviceIds : (subData.deviceId ? [subData.deviceId] : []);
+
+                if (!registeredDevices.includes(myDeviceId)) {
+                    if (registeredDevices.length >= 2) {
+                        if(msgLabel) msgLabel.innerText = "⛔ هذا الكود مستخدم على جهازين بالفعل. تواصل مع الدعم والصيانة لتصفير أحد الأجهزة.";
+                        window.showNotif("⛔ تم الوصول للحد الأقصى من الأجهزة (2). تواصل مع الإدارة.", "error");
+                        return;
+                    }
+                    const updatedDevices = [...registeredDevices, myDeviceId];
+                    try {
+                        await updateDoc(subRef, { deviceIds: updatedDevices });
+                    } catch(e) { console.warn('فشل تسجيل بصمة الجهاز', e); }
+                }
+
+                window.activeKey = subSnap.id;
+                window.myLeaderName = subData.ownerName || "قائد ميداني";
+                return window.launchOS('leader', subSnap.id, "تم التحقق: أهلاً بك أيها القائد");
+            }
+
+            if(msgLabel) msgLabel.innerText = "⛔ كود القائد غير صحيح أو غير مسجل";
+            window.showNotif("كود القائد غير صحيح", "error");
+            return;
         }
 
+        // === مسار العضو الميداني فقط ===
+        if (loginType === 'member') {
+            const inputHash = await hashInput(key, MASTER_SALT);
+            let memRef = doc(db, 'artifacts', appId, 'public', 'data', 'team_keys', inputHash || "NO_HASH");
+            let memSnap = await getDoc(memRef);
 
+            if(!memSnap.exists()) {
+                memRef = doc(db, 'artifacts', appId, 'public', 'data', 'team_keys', key);
+                memSnap = await getDoc(memRef);
+            }
 
-        // 3. فحص كود العضو (Member) المدمج (مشفر + قديم)
-        let memRef = doc(db, 'artifacts', appId, 'public', 'data', 'team_keys', inputHash || "NO_HASH");
-        let memSnap = await getDoc(memRef);
-        
-        if(!memSnap.exists()) {
-            memRef = doc(db, 'artifacts', appId, 'public', 'data', 'team_keys', key);
-            memSnap = await getDoc(memRef);
+            if(memSnap.exists()){
+                const d = memSnap.data();
+
+                const myDeviceId = getDeviceId();
+                if (d.deviceId && d.deviceId !== myDeviceId) {
+                    if(msgLabel) msgLabel.innerText = "⛔ هذا الكود مرتبط بجهاز آخر. تواصل مع الدعم والصيانة لتصفيره.";
+                    window.showNotif("⛔ الكود مقفل على جهاز آخر. تواصل مع الإدارة.", "error");
+                    return;
+                }
+                if (!d.deviceId) {
+                    try {
+                        await updateDoc(memRef, { deviceId: myDeviceId });
+                    } catch(e) { console.warn('فشل تسجيل بصمة جهاز العضو', e); }
+                }
+
+                window.activeKey = memSnap.id; 
+                window.myMemberName = d.memberName || "عضو ميداني";
+                window.activeParentKey = d.parentKey; 
+                return window.launchOS('member', memSnap.id, "تم التحقق: دخول العضو الميداني");
+            }
+
+            if(msgLabel) msgLabel.innerText = "⛔ كود العضو غير صحيح أو غير مسجل";
+            window.showNotif("كود العضو غير صحيح", "error");
+            return;
         }
-        
-        if(memSnap.exists()){
-            const d = memSnap.data();
-            window.activeKey = memSnap.id; 
-            window.myMemberName = d.memberName || "عضو ميداني";
-            window.activeParentKey = d.parentKey; 
-            return window.launchOS('member', memSnap.id, "تم التحقق: دخول العضو الميداني");
-        }
-
-        if(msgLabel) msgLabel.innerText = "خطأ: رمز الوصول غير مسجل";
-        window.showNotif("رمز الدخول غير صالح", "error");
 
     } catch (e) { 
         console.error("System Error during Login:", e);
         if(msgLabel) msgLabel.innerText = "حدث خطأ في النظام، راجع الكونسول";
         window.showNotif("خطأ في الاتصال أو التحقق", "error"); 
     } finally {
-        // إعادة الزر لحالته الأصلية عند أي نتيجة
         const loginBtn = document.querySelector('[onclick="window.activateApp()"]');
-        if (loginBtn) { loginBtn.textContent = 'تفعيل الدخول'; loginBtn.removeAttribute('disabled'); }
+        if (loginBtn) { loginBtn.textContent = 'دخول ←'; loginBtn.removeAttribute('disabled'); }
     }
 };
 
@@ -838,20 +1042,36 @@ if(subSnap.exists()){
 
 
 
-
 window.revealKey = (type, docId) => {
-    const modal = document.getElementById('otpRevealModal');
-    if (!modal) return;
+    // القائد يرى شفرة عضوه مباشرة بدون OTP
+    if (window.userRole === 'leader' && type === 'member') {
+        const path = 'team_keys';
+        getDoc(doc(db, 'artifacts', appId, 'public', 'data', path, docId)).then(snap => {
+            if (snap.exists() && snap.data().secretKey) {
+                window.showKeyAlert(
+                    `🔓 الشفرة الأصلية — ${snap.data().memberName || ''}`,
+                    snap.data().secretKey
+                );
+            } else {
+                window.showNotif("الشفرة الأصلية غير مسجلة لهذا الحساب", "error");
+            }
+        }).catch(() => window.showNotif("فشل الاتصال بقاعدة البيانات", "error"));
+        return;
+    }
 
-    modal.style.display = 'flex';
-    const input = document.getElementById('otpRevealInput');
-    if (input) { input.value = ''; input.focus(); }
-
-    // حفظ السياق للاستخدام عند التأكيد
-    window._revealContext = { type, docId };
+    // المدير: يرى الشفرة مباشرة بدون OTP
+    const path = type === 'sub' ? 'subscribers' : 'team_keys';
+    getDoc(doc(db, 'artifacts', appId, 'public', 'data', path, docId)).then(snap => {
+        if (snap.exists() && snap.data().secretKey) {
+            window.showKeyAlert(
+                `🔓 الشفرة الأصلية — ${snap.data().ownerName || snap.data().memberName || ''}`,
+                snap.data().secretKey
+            );
+        } else {
+            window.showNotif("الشفرة الأصلية غير مسجلة لهذا الحساب", "error");
+        }
+    }).catch(() => window.showNotif("فشل الاتصال بقاعدة البيانات", "error"));
 };
-
-
 
 
 window.confirmRevealKey = async () => {
@@ -932,23 +1152,104 @@ document.addEventListener('DOMContentLoaded', () => {
 window.verifyOTP = () => {
     const code = document.getElementById('otpInput').value.trim();
     const totp = new OTPAuth.TOTP({ secret: MASTER_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    
+
     if (totp.validate({ token: code, window: 2 }) !== null) {
         document.getElementById('otpModal').classList.replace('flex', 'hidden');
-        
-        // استخدام جلسة وهمية آمنة بدلاً من المتغير المحذوف
-        window.activeKey = 'MASTER_SESSION';
-        window.launchOS('master', 'MASTER_SESSION', "تم التحقق السيادي بنجاح");
-    } else { 
-        window.showNotif("رمز غير صحيح", "error"); 
+        document.getElementById('otpInput').value = '';
+
+        if (_adminOtpPhase === 1) {
+            // ✅ المرحلة الأولى نجحت — أظهر حقل رمز الإدارة
+            _adminOtpPhase = 0;
+            const prefixRow = document.getElementById('prefixedInputRow');
+            const passwordInput = document.getElementById('activationInput');
+            prefixRow?.classList.add('hidden');
+            passwordInput?.classList.remove('hidden');
+            if (passwordInput) { passwordInput.value = ''; passwordInput.focus(); }
+            document.getElementById('codeInputWrap')?.classList.remove('hidden');
+            document.getElementById('loginActionBtns')?.classList.remove('hidden');
+            window.showNotif("✅ التحقق الأول نجح — أدخل رمز الإدارة", "success");
+
+        } else if (_adminOtpPhase === 2) {
+            // ✅ المرحلة الثانية نجحت — دخول النظام
+            _adminOtpPhase = 0;
+            window.activeKey = 'MASTER_SESSION';
+            window.launchOS('master', 'MASTER_SESSION', "تم التحقق السيادي بنجاح");
+
+        } else {
+            // مسار عادي قديم
+            window.activeKey = 'MASTER_SESSION';
+            window.launchOS('master', 'MASTER_SESSION', "تم التحقق السيادي بنجاح");
+        }
+    } else {
+        window.showNotif("⛔ رمز المصادقة غير صحيح", "error");
+        document.getElementById('otpInput').value = '';
     }
-};  
+};
 
 
 
+// ===== نظام البلاغات الطارئة =====
+window.openEmergencyReport = () => {
+    const modal = document.getElementById('winEmergencyReport');
+    if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+    // تحديد المادة الحالية إن وجدت
+    const currentMat = window.currentMaterial;
+    if (currentMat) {
+        const matEl = document.getElementById('emergencyMaterial');
+        if (matEl) matEl.value = currentMat.name || currentMat.NAME || '';
+        const unEl = document.getElementById('emergencyUN');
+        if (unEl) unEl.value = currentMat.un || currentMat.UN || '';
+    }
+};
 
 
+window.sendEmergencyReport = async () => {
+    const memberName = window.myMemberName || 'عضو غير معروف';
+    const material = document.getElementById('emergencyMaterial')?.value.trim() || 'غير محددة';
+    const unNum = document.getElementById('emergencyUN')?.value.trim() || '—';
+    const level = document.getElementById('emergencyLevel')?.value || 'متوسط';
+    const notes = document.getElementById('emergencyNotes')?.value.trim() || '';
 
+    // الحصول على الموقع الجغرافي
+    const getLocation = () => new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
+            () => resolve(null),
+            { timeout: 5000 }
+        );
+    });
+
+    window.showNotif("📍 جاري تحديد موقعك...", "success");
+    const loc = await getLocation();
+
+    const reportData = {
+        memberName,
+        materialName: material,
+        unNum,
+        priority: (level === 'عالي' || level === 'حرج') ? 'high' : 'normal',
+        notes,
+        location: loc,
+        parentKey: window.activeParentKey || '',
+        timestamp: Date.now(),
+        status: 'new',
+        type: 'emergency'
+    };
+
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'reports'), reportData);
+        window.showNotif("🚨 تم إرسال البلاغ للقائد بنجاح!", "success");
+        document.getElementById('winEmergencyReport')?.classList.add('hidden');
+        document.getElementById('winEmergencyReport')?.classList.remove('flex');
+        // تفريغ الحقول
+        ['emergencyMaterial','emergencyUN','emergencyNotes'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+} catch(e) {
+        window.showNotif("فشل إرسال البلاغ — تحقق من الاتصال", "error");
+    }
+};
 
 
 window.renderSubTable = () => {
@@ -996,6 +1297,18 @@ return `
 
 
 
+window.filterPayments = (query) => {
+    const list = document.getElementById('finPaymentsList');
+    if (!list) return;
+    const q = query.toLowerCase().trim();
+    list.querySelectorAll('.payment-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+};
+
+
+
 // ===== نافذة المالية والاشتراكات =====
 window.financeTab = (tab) => {
     ['pending','trials','payments','blocked'].forEach(t => {
@@ -1020,6 +1333,25 @@ window.financeTab = (tab) => {
         activeBtn.style.border = '1px solid rgba(16,185,129,0.3)';
     }
     if (tab === 'pending') window.loadFinancePending();
+// تحديث badges التبويبات
+        const updateBadge = (id, count) => {
+            const el = document.getElementById(`ftab_${id}_badge`);
+            if (!el) return;
+            if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
+            else el.classList.add('hidden');
+        };
+        // جلب عدد الطلبات المعلقة
+        getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'pending_requests'))
+            .then(s => updateBadge('pending', s.docs.filter(d => d.data().status === 'Pending Payment Verification').length))
+            .catch(() => {});
+        // جلب عدد التجارب المعلقة
+        getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'trial_requests'))
+            .then(s => updateBadge('trials', s.docs.filter(d => d.data().status === 'pending').length))
+            .catch(() => {});
+        // جلب عدد المحظورين
+        getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'blocked_phones'))
+            .then(s => updateBadge('blocked', s.size))
+            .catch(() => {});
     window.loadFinanceStats();
     if (tab === 'trials') window.loadTrials();
     if (tab === 'payments') window.loadPayments();
@@ -1044,25 +1376,45 @@ window.loadFinanceStats = async () => {
         const statsEl = document.getElementById('financeStats');
         if (statsEl) statsEl.innerHTML = `
             <div class="grid grid-cols-5 gap-3">
-                <div class="rounded-2xl p-4 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
-                    <p class="text-2xl font-black text-emerald-400">${totalIncome}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">💵 إجمالي الدخل $</p>
+                <div class="rounded-2xl p-4" style="background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(16,185,129,0.05)); border:1px solid rgba(16,185,129,0.25);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-2xl">💵</span>
+                        <span class="text-[9px] font-black text-emerald-400/60 uppercase">سنوي</span>
+                    </div>
+                    <p class="text-3xl font-black text-emerald-400">${totalIncome}<span class="text-sm ml-1">$</span></p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">إجمالي الدخل</p>
                 </div>
-                <div class="rounded-2xl p-4 text-center" style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
-                    <p class="text-2xl font-black text-blue-400">${activeSubs}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">✅ مشتركون نشطون</p>
+                <div class="rounded-2xl p-4" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(59,130,246,0.05)); border:1px solid rgba(59,130,246,0.25);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-2xl">✅</span>
+                        <span class="text-[9px] font-black text-blue-400/60 uppercase">نشط</span>
+                    </div>
+                    <p class="text-3xl font-black text-blue-400">${activeSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">مشتركون نشطون</p>
                 </div>
-                <div class="rounded-2xl p-4 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
-                    <p class="text-2xl font-black text-rose-400">${expiredSubs}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">⛔ اشتراكات منتهية</p>
+                <div class="rounded-2xl p-4" style="background:linear-gradient(135deg,rgba(220,38,38,0.15),rgba(220,38,38,0.05)); border:1px solid rgba(220,38,38,0.25);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-2xl">⛔</span>
+                        <span class="text-[9px] font-black text-rose-400/60 uppercase">منتهي</span>
+                    </div>
+                    <p class="text-3xl font-black text-rose-400">${expiredSubs}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">اشتراكات منتهية</p>
                 </div>
-                <div class="rounded-2xl p-4 text-center" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
-                    <p class="text-2xl font-black text-amber-400">${pendingTrials}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">⏳ تجارب معلقة</p>
+                <div class="rounded-2xl p-4" style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05)); border:1px solid rgba(245,158,11,0.25);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-2xl">⏳</span>
+                        <span class="text-[9px] font-black text-amber-400/60 uppercase">معلق</span>
+                    </div>
+                    <p class="text-3xl font-black text-amber-400">${pendingTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">تجارب معلقة</p>
                 </div>
-                <div class="rounded-2xl p-4 text-center" style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2);">
-                    <p class="text-2xl font-black text-purple-400">${activeTrials}</p>
-                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">🎯 تجارب نشطة</p>
+                <div class="rounded-2xl p-4" style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(139,92,246,0.05)); border:1px solid rgba(139,92,246,0.25);">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-2xl">🎯</span>
+                        <span class="text-[9px] font-black text-purple-400/60 uppercase">نشط</span>
+                    </div>
+                    <p class="text-3xl font-black text-purple-400">${activeTrials}</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase mt-1">تجارب نشطة</p>
                 </div>
             </div>`;
     } catch(e) {}
@@ -1074,7 +1426,11 @@ window.loadFinancePending = async () => {
     try {
         const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'pending_requests'));
         const pending = snap.docs.map(d => ({id: d.id, ...d.data()})).filter(r => r.status === 'Pending Payment Verification');
-        if (pending.length === 0) { list.innerHTML = '<p class="text-center text-slate-600 text-xs py-10">لا توجد طلبات معلقة</p>'; return; }
+        if (pending.length === 0) { list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 gap-3">
+                <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);">✅</div>
+                <p class="text-slate-500 font-black text-sm">لا توجد طلبات معلقة</p>
+                <p class="text-slate-700 text-xs">جميع الطلبات تمت معالجتها</p>
+            </div>`; return; }
         list.innerHTML = pending.map(r => `
             <div class="rounded-2xl p-4 text-right transition-all" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07);">
                 <div class="flex items-start justify-between gap-4">
@@ -1168,6 +1524,7 @@ window.loadPayments = async () => {
     const subs = window.subscribers || [];
     if (subs.length === 0) { list.innerHTML = '<p class="text-center text-slate-600 text-xs py-10">لا يوجد مشتركون</p>'; return; }
     list.innerHTML = subs.map(s => `
+<div class="payment-item
         <div class="flex items-center justify-between bg-white/3 border border-white/5 rounded-xl px-4 py-3">
             <div class="text-right">
                 <p class="text-white text-xs font-black">${s.ownerName}</p>
@@ -1587,6 +1944,9 @@ window.manageLeaderTeam = (leaderId, leaderName) => {
     if (window.userRole === 'master') {
         filterRow?.classList.remove('hidden');
         window.populateLeaderFilter();
+        // ضبط القائمة المنسدلة على القائد المختار تلقائياً
+        const sel = document.getElementById('leaderFilterSelect');
+        if (sel) sel.value = leaderId;
     } else {
         filterRow?.classList.add('hidden');
     }
@@ -1617,7 +1977,7 @@ async function fetchSecurityConfig() {
             if (data.masterHash) MASTER_HASH = data.masterHash;
             if (data.masterSalt) MASTER_SALT = data.masterSalt;
             
-            AUTH_APP_ENABLED = data.authAppEnabled !== undefined ? data.authAppEnabled : AUTH_APP_ENABLED;
+            window.AUTH_APP_ENABLED = data.authAppEnabled !== undefined ? data.authAppEnabled : window.AUTH_APP_ENABLED;
             if (data.totpSecret) MASTER_TOTP_SECRET = data.totpSecret;
             
             if (document.getElementById('otpToggle')) document.getElementById('otpToggle').checked = AUTH_APP_ENABLED;
@@ -1681,7 +2041,7 @@ window.updateMasterSecurity = async () => {
                 updatedAt: Date.now()
             }, { merge: true });
             
-            AUTH_APP_ENABLED = authStatus;
+            window.AUTH_APP_ENABLED = authStatus;
             window.logActivity('master_key_change', `تحديث إعدادات المصادقة الثنائية (TOTP: ${authStatus ? 'مفعّل' : 'معطّل'})`);
             window.loadSecurityLog?.();
             return window.showNotif("تم تحديث إعدادات المصادقة بنجاح", "success");
@@ -1714,7 +2074,7 @@ window.updateMasterSecurity = async () => {
         // 4. تحديث متغيرات الجلسة الحالية
         MASTER_HASH = newHash;
         MASTER_SALT = newSalt;
-        AUTH_APP_ENABLED = authStatus;
+        window.AUTH_APP_ENABLED = authStatus;
 
         window.showNotif("تم تحديث وتشفير شفرة المدير بنجاح 🔒", "success");
         window.logActivity('master_key_change', 'تم تغيير الشفرة السيادية للمدير الأعلى');
@@ -1798,10 +2158,21 @@ window.manualRegistryUpload = async () => {
 window.pickMat = (un) => {
     // 1. البحث عن المادة في السجل
     const material = window.appData.find(x => (x.un || x.UN).toString() === un.toString());
-    
     if (material) {
         window.activeMaterial = material;
-        
+
+        // تسجيل عملية البحث في Firebase
+        if (window.userRole === 'member' || window.userRole === 'leader') {
+            addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'search_logs'), {
+                userName: window.myMemberName || window.myLeaderName || 'مستخدم',
+                userRole: window.userRole,
+                parentKey: window.activeParentKey || window.activeSubKey || '',
+                materialName: material.name || material.Name || '',
+                unNumber: material.un || material.UN || '',
+                timestamp: Date.now()
+            }).catch(() => {});
+        }
+
         // 2. تحديث واجهة المستخدم
         document.getElementById('sInput').value = material.name || material.Name;
         document.getElementById('drop').classList.add('hidden'); // إخفاء القائمة فور الاختيار
@@ -1927,18 +2298,34 @@ window.addNewSub = async () => {
 
 
 window.resetDevice = (type, key) => {
+    // قاصر على المدير فقط — الدعم والصيانة (الإدارة)
+    if (window.userRole !== 'master') {
+        window.showNotif("⛔ هذه الصلاحية محصورة بالإدارة (الدعم والصيانة) فقط", "error");
+        return;
+    }
+
+    const label = type === 'sub' ? 'القائد (سيُسمح له بجهازين جديدين)' : 'العضو (سيُسمح له بجهاز واحد جديد)';
+
     window.showConfirm(
         "تصفير بصمة الجهاز",
-        "هل تريد تصفير بصمة الجهاز لهذا الكود؟ سيضطر المستخدم لتسجيل الدخول من جديد.",
+        `هل تريد تصفير كل الأجهزة المسجلة لهذا ${label}؟ سيُطلب منه تسجيل الدخول من جديد على الأجهزة المطلوبة.`,
         async () => {
             const path = type === 'sub' ? 'subscribers' : 'team_keys';
             try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', path, key), { deviceId: null });
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', path, key), {
+                    deviceId: null,
+                    deviceIds: []
+                });
+                window.logActivity('device_reset', `تصفير بصمة جهاز ${label} — المعرّف: ${key}`);
                 window.showNotif("تم تصفير الجهاز بنجاح", "success");
             } catch(e) { window.showNotif("خطأ في الاتصال بالسحابة", "error"); }
         }
     );
 };
+
+
+
+
 
 window.deleteEntry = (type, key) => {
     window.showConfirm(
@@ -2079,11 +2466,25 @@ window.launchOS = (role, key, msg) => {
     }, 500);
 
     // تطبيق الصلاحيات
-    window.applyOSUI(); 
+    window.applyOSUI();
+    // تحديث لوحة الترحيب باسم المستخدم الصحيح
+    const _nameEl = document.getElementById('welcomeName');
+    const _roleEl = document.getElementById('welcomeRole');
+    if (_nameEl) {
+        if (role === 'master') _nameEl.textContent = 'الدعم والصيانة - الإدارة';
+        else if (role === 'leader') _nameEl.textContent = window.myLeaderName || 'القائد الميداني';
+        else _nameEl.textContent = window.myMemberName || 'العضو الميداني';
+    }
+    if (_roleEl) {
+        if (role === 'master') _roleEl.textContent = '⚡ Master — Full System Access';
+        else if (role === 'leader') _roleEl.textContent = '🎖️ Field Leader — Command Active';
+        else _roleEl.textContent = '👤 Field Member — ERG Access';
+    }
 
     // التوجيه: العضو يذهب فوراً للنظام، المدير والقائد لسطح المكتب
     if(role === 'member') {
         window.openWin('winERG');
+        window.renderLauncher?.();   // لتفعيل ظهور زر البلاغ الطارئ العائم للعضو
     } else {
         window.openWin('os_desktop');
     }
@@ -2134,7 +2535,7 @@ window.applyOSUI = () => {
     const statusDot = document.getElementById('statusDot');
     
     // قائمة بجميع الأيقونات
-    const allAppIds = ['app_erg', 'app_reps', 'app_map', 'app_subs', 'app_team', 'app_cloud', 'app_config', 'app_import', 'app_dashboard'];
+    const allAppIds = ['app_erg', 'app_reps', 'app_map', 'app_subs', 'app_team', 'app_cloud', 'app_config', 'app_import', 'app_dashboard', 'app_finance'];
 
     // 1. إخفاء جميع الأيقونات كإجراء أمني وافتراضي باستخدام (Style) مباشر
     allAppIds.forEach(id => {
@@ -2180,9 +2581,6 @@ setTimeout(() => {
     }
 }, 1500);
 
-
-
-
     }
 
 
@@ -2215,7 +2613,7 @@ setTimeout(() => {
         document.querySelectorAll('.app-icon-wrapper').forEach(w => w.style.borderColor = "rgba(16, 185, 129, 0.3)");
     }
 
-    // --- 3. بروتوكول المدير الأعلى (صلاحيات كاملة) ---
+    // --- 3. بروتوكول الدعم والصيانة - الإدارة (صلاحيات كاملة) ---
     else if(window.userRole === 'master') {
         document.body.setAttribute('data-role', 'master');
         if(desktop) desktop.style.background = `
@@ -2234,7 +2632,7 @@ setTimeout(() => {
 
         if(b) {
             b.className = "px-5 py-1.5 rounded-full font-black italic text-[10px] bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.5)] uppercase tracking-widest";
-            b.textContent = "المدير الأعلى للمنظومة";
+            b.textContent = "الدعم والصيانة - الإدارة";
         }
         if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_10px_#fbbf24]";
         
@@ -2273,11 +2671,12 @@ window.renderLauncher = () => {
     D('app_config',    M);              // مدير فقط
     D('app_import',    M);              // مدير فقط
     D('app_dashboard', M);              // مدير فقط
-// تحديث لوحة الترحيب
+    D('app_emergency', MB);             // العضو فقط — بلاغ طارئ
+        // تحديث لوحة الترحيب
     const nameEl = document.getElementById('welcomeName');
     const roleEl = document.getElementById('welcomeRole');
     if (nameEl) {
-        if (M) nameEl.textContent = 'المدير الأعلى';
+        if (M) nameEl.textContent = 'الدعم والصيانة - الإدارة';
         else if (L) nameEl.textContent = window.myLeaderName || 'القائد الميداني';
         else nameEl.textContent = window.myMemberName || 'العضو الميداني';
     }
@@ -2368,7 +2767,7 @@ window.initMap = () => {
     };
 
     L.control.layers(baseMaps).addTo(map);
-    window.refreshMapMarkers(); 
+    window.refreshMapMarkers();
 };
 
         
@@ -2383,6 +2782,10 @@ const myReports = window.userRole === 'master'
         ? window.allReports
         : window.allReports.filter(r => r.parentKey === window.activeKey);
     const reportsToShow = myReports;
+
+    if (window.markersLayer) {
+        map.removeLayer(window.markersLayer);
+    }
 
     if (!map) return; // الخريطة لم تفتح بعد
     
@@ -3210,6 +3613,102 @@ window.exportPDF = async () => {
 };
 
 
+// ===== تقرير الحادث الكامل PDF =====
+window.exportFullIncidentPDF = async () => {
+    const m = window.currentMaterial;
+    if (!m) { window.showNotif("افتح مادة أولاً ثم صدّر التقرير", "error"); return; }
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
+    const timeStr = now.toLocaleTimeString('ar-SA');
+    const reportId = `INC-${Date.now()}`;
+    const teamName = window.myLeaderName || window.myMemberName || 'فريق الدفاع المدني';
+
+    const content = document.createElement('div');
+    content.style.cssText = 'direction:rtl; font-family:Arial,sans-serif; background:#fff; padding:40px; color:#1a1a1a;';
+    content.innerHTML = `
+        <div style="border-bottom:3px solid #dc2626; padding-bottom:20px; margin-bottom:30px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h1 style="font-size:22px; font-weight:900; color:#dc2626; margin:0;">🚨 تقرير حادث ميداني</h1>
+                <p style="font-size:12px; color:#666; margin:4px 0;">الدفاع المدني — المنطقة الصناعية الجنوبية — العقبة</p>
+                <p style="font-size:11px; color:#999;">رقم التقرير: ${reportId}</p>
+            </div>
+            <div style="text-align:left;">
+                <p style="font-size:12px; font-weight:700;">${dateStr}</p>
+                <p style="font-size:12px; color:#666;">${timeStr}</p>
+            </div>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:25px;">
+            <tr style="background:#dc2626; color:white;">
+                <th colspan="2" style="padding:10px; text-align:right; font-size:14px;">معلومات المادة الخطرة</th>
+            </tr>
+            <tr style="background:#fef2f2;">
+                <td style="padding:8px 12px; font-weight:700; width:40%;">اسم المادة</td>
+                <td style="padding:8px 12px;">${m.name || m.NAME || '—'}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 12px; font-weight:700;">رقم UN</td>
+                <td style="padding:8px 12px; font-weight:900; color:#dc2626;">${m.un || m.UN || '—'}</td>
+            </tr>
+            <tr style="background:#fef2f2;">
+                <td style="padding:8px 12px; font-weight:700;">درجة الخطورة</td>
+                <td style="padding:8px 12px;">${m.hazard_class || m.HAZARD_CLASS || '—'}</td>
+            </tr>
+        </table>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:25px;">
+            <tr style="background:#1e40af; color:white;">
+                <th colspan="2" style="padding:10px; text-align:right; font-size:14px;">معلومات الفريق</th>
+            </tr>
+            <tr style="background:#eff6ff;">
+                <td style="padding:8px 12px; font-weight:700; width:40%;">القائد / المشرف</td>
+                <td style="padding:8px 12px;">${window.myLeaderName || '—'}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 12px; font-weight:700;">اسم الفريق</td>
+                <td style="padding:8px 12px;">${teamName}</td>
+            </tr>
+            <tr style="background:#eff6ff;">
+                <td style="padding:8px 12px; font-weight:700;">التاريخ والوقت</td>
+                <td style="padding:8px 12px;">${dateStr} — ${timeStr}</td>
+            </tr>
+        </table>
+
+        <div style="background:#f0fdf4; border:1px solid #16a34a; border-radius:8px; padding:15px; margin-bottom:20px;">
+            <h3 style="color:#16a34a; margin:0 0 10px; font-size:14px;">✅ الإجراءات المتخذة</h3>
+            <ul style="margin:0; padding-right:20px; font-size:12px; line-height:2;">
+                <li>تحديد نوع المادة ورقم UN</li>
+                <li>تحديد منطقة العزل وإخلاء المنطقة</li>
+                <li>ارتداء معدات الوقاية الشخصية المناسبة</li>
+                <li>التواصل مع مركز العمليات</li>
+                <li>توثيق الحادث في النظام</li>
+            </ul>
+        </div>
+
+        <div style="background:#fefce8; border:1px solid #ca8a04; border-radius:8px; padding:15px; margin-bottom:20px;">
+            <h3 style="color:#ca8a04; margin:0 0 10px; font-size:14px;">⚠️ ملاحظات الحادث</h3>
+            <p style="font-size:12px; color:#666; min-height:60px;">${document.getElementById('incidentNotes')?.value || 'لا توجد ملاحظات مدخلة'}</p>
+        </div>
+
+        <div style="border-top:2px solid #e5e7eb; padding-top:15px; display:flex; justify-content:space-between; font-size:11px; color:#999;">
+            <span>ERG SYSTEM — الدفاع المدني الأردني</span>
+            <span>${reportId}</span>
+            <span>وثيقة رسمية — سري</span>
+        </div>
+    `;
+
+    const opt = {
+        margin: 0,
+        filename: `INCIDENT_REPORT_${reportId}.pdf`,
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(content).save();
+    window.showNotif("📄 جاري تصدير تقرير الحادث...", "success");
+};
+
 
 
 
@@ -3481,6 +3980,39 @@ window.installPWA = async () => {
                 if(clockEl) clockEl.textContent = new Date().toLocaleTimeString('ar-SA'); 
             }, 1000); 
         };
+
+
+
+// دالة نسخ موحّدة — تعمل على HTTPS وعلى file:// (للملفات المحلية) بدون أخطاء
+window.copyText = (text) => {
+    if (!text) return;
+
+    const fallbackCopy = () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) window.showNotif('✅ تم نسخ الكود', 'success');
+            else window.showNotif('⚠️ فشل النسخ، حدّد النص يدوياً (Ctrl+C)', 'error');
+        } catch (e) {
+            window.showNotif('⚠️ فشل النسخ، حدّد النص يدوياً (Ctrl+C)', 'error');
+        }
+    };
+
+    if (navigator.clipboard && location.protocol !== 'file:' && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+            .then(() => window.showNotif('✅ تم نسخ الكود', 'success'))
+            .catch(fallbackCopy);
+    } else {
+        fallbackCopy();
+    }
+};
 
 
 
@@ -4169,13 +4701,114 @@ window.startBarcodeStream = async () => {
     }
 };
 
+
+window.switchChatRoom = () => {
+    const sel = document.getElementById('chatTargetSelect');
+    if (!sel) return;
+    window._activeChatKey = sel.value;
+    window.loadChatMessages(sel.value);
+};
+
+window.sendMaintenanceAlert = async () => {
+    window.showConfirm('تنبيه صيانة', 'إرسال تنبيه صيانة لجميع القادة؟', async () => {
+        try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chats', 'MASTER_BROADCAST', 'messages'), {
+                text: '🔧 تنبيه: التطبيق قيد الصيانة والتحديث حالياً. نعتذر عن أي انقطاع مؤقت.',
+                senderId: 'MASTER',
+                senderName: '🛡️ الدعم والصيانة - الإدارة',
+                senderRole: 'master',
+                timestamp: Date.now()
+            });
+            window.showNotif('✅ تم إرسال تنبيه الصيانة لجميع القادة', 'success');
+        } catch(e) { window.showNotif('❌ فشل الإرسال', 'error'); }
+    });
+};
+
+window.populateChatLeaders = () => {
+    const sel = document.getElementById('chatTargetSelect');
+    if (!sel) return;
+    const leaders = window.subscribers || [];
+    const options = `<option value="MASTER_BROADCAST">📢 جميع القادة (بث عام)</option>` +
+        leaders.map(l => `<option value="${l.subKey || l.id}">👤 ${l.ownerName}</option>`).join('');
+    sel.innerHTML = options;
+};
+
+window.toggleChat = () => {
+    const win = document.getElementById('winChat');
+    if (win && !win.classList.contains('hidden')) {
+        window.closeChat();
+    } else {
+        window.openChat();
+    }
+};
+
+
 // ===== المحادثة الداخلية =====
 window.openChat = () => {
     const win = document.getElementById('winChat');
     if (win) { win.classList.remove('hidden'); win.classList.add('flex'); }
-    window.loadChatMessages();
+
+    // إظهار شريط التحكم للمدير فقط
+    const masterControls = document.getElementById('masterChatControls');
+    if (masterControls) {
+        if (window.userRole === 'master') {
+            masterControls.classList.remove('hidden');
+            window.populateChatLeaders();
+        } else {
+            masterControls.classList.add('hidden');
+        }
+    }
+
+    if (window.userRole === 'leader') {
+        // للقائد: أظهر تبويبين — قناة المدير + قناة الفريق
+        window.openLeaderChat('broadcast'); // افتراحياً يبدأ بقناة المدير
+    } else {
+        const chatTitle = document.getElementById('chatRoomTitle');
+        if (chatTitle) chatTitle.textContent = window.userRole === 'master'
+            ? '📢 القناة العامة — جميع القادة'
+            : '💬 قناة القائد';
+        window.loadChatMessages();
+    }
 };
 
+// فتح قناة محددة للقائد
+window.openLeaderChat = (type) => {
+// إظهار التبويبين للقائد فقط
+    const tabs = document.getElementById('leaderChatTabs');
+    if (tabs) tabs.classList.replace('hidden', 'flex');    
+    const chatTitle = document.getElementById('chatRoomTitle');
+
+    // تحديث التبويبات
+    const tabBroadcast = document.getElementById('leaderChatTabBroadcast');
+    const tabTeam = document.getElementById('leaderChatTabTeam');
+    if (tabBroadcast && tabTeam) {
+        if (type === 'broadcast') {
+            tabBroadcast.style.background = 'rgba(16,185,129,0.2)';
+            tabBroadcast.style.color = '#10b981';
+            tabTeam.style.background = 'transparent';
+            tabTeam.style.color = '#6b7280';
+        } else {
+            tabTeam.style.background = 'rgba(99,102,241,0.2)';
+            tabTeam.style.color = '#818cf8';
+            tabBroadcast.style.background = 'transparent';
+            tabBroadcast.style.color = '#6b7280';
+        }
+    }
+
+    if (type === 'broadcast') {
+        if (chatTitle) chatTitle.textContent = '📢 رسائل الدعم والصيانة - الإدارة';
+        window.loadChatMessages('MASTER_BROADCAST');
+        // مسح شارة الإشعار
+        localStorage.setItem('chat_seen_MASTER_BROADCAST', Date.now());
+        const badge = document.getElementById('chatUnreadBadge');
+        if (badge) badge.classList.add('hidden');
+        const chatBadge = document.getElementById('chatBadge');
+        if (chatBadge) chatBadge.classList.add('hidden');
+    } else {
+        if (chatTitle) chatTitle.textContent = '👥 قناة فريقي';
+        window.loadChatMessages(window.activeSubKey);
+    }
+};
 window.closeChat = () => {
     const win = document.getElementById('winChat');
     if (win) { win.classList.add('hidden'); win.classList.remove('flex'); }
@@ -4183,12 +4816,23 @@ window.closeChat = () => {
 };
 
 
-window.loadChatMessages = () => {
+window.loadChatMessages = (roomKey = null) => {
     const container = document.getElementById('chatMessages');
     if (!container) return;
-    const chatKey = window.userRole === 'leader' ? window.activeSubKey :
-                    window.userRole === 'member'  ? window.activeParentKey : null;
+
+    // تحديد غرفة المحادثة
+    let chatKey;
+    if (window.userRole === 'master') {
+        chatKey = 'MASTER_BROADCAST'; // قناة المدير العامة
+    } else if (window.userRole === 'leader') {
+        chatKey = roomKey || window.activeSubKey; // قناة القائد مع فريقه
+    } else if (window.userRole === 'member') {
+        chatKey = window.activeParentKey; // القائد الخاص بالعضو
+    } else {
+        return;
+    }
     if (!chatKey) return;
+    window._activeChatKey = chatKey;
 
     if (window._chatListener) window._chatListener();
     let lastSeenTimestamp = parseInt(localStorage.getItem(`chat_seen_${chatKey}`) || '0');
@@ -4249,23 +4893,41 @@ window.loadChatMessages = () => {
 
 
 
+window.listenMasterBroadcast = () => {
+    if (window.userRole !== 'leader') return;
+    window._masterChatListener && window._masterChatListener();
+    window._masterChatListener = onSnapshot(
+        query(collection(db, 'artifacts', appId, 'public', 'data', 'chats', 'MASTER_BROADCAST', 'messages')),
+        (snap) => {
+            const msgs = snap.docs.map(d => d.data());
+            const lastSeen = parseInt(localStorage.getItem('chat_seen_MASTER_BROADCAST') || '0');
+            const unread = msgs.filter(m => m.timestamp > lastSeen && m.senderId !== window.activeSubKey);
+            if (unread.length > 0) {
+                const badge = document.getElementById('chatBadge');
+                if (badge) { badge.textContent = unread.length; badge.classList.remove('hidden'); }
+                const chatUnread = document.getElementById('chatUnreadBadge');
+                if (chatUnread) { chatUnread.textContent = unread.length; chatUnread.classList.remove('hidden'); }
+            }
+        }
+    );
+};
+
 window.sendChatMessage = async () => {
     const input = document.getElementById('chatInput');
     const text = input?.value.trim();
     if (!text) return;
-    const chatKey = window.userRole === 'leader' ? window.activeSubKey :
-                    window.userRole === 'member'  ? window.activeParentKey : null;
+    const chatKey = window._activeChatKey;
     if (!chatKey) return;
     try {
         input.value = '';
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chats', chatKey, 'messages'), {
             text,
-            senderId: window.activeSubKey || window.activeParentKey || 'unknown',
-            senderName: window.myLeaderName || window.myMemberName || 'مستخدم',
+            senderId: window.userRole === 'master' ? 'MASTER' : (window.activeSubKey || window.activeParentKey || 'unknown'),
+            senderName: window.userRole === 'master' ? '🛡️ الدعم والصيانة - الإدارة' : (window.myLeaderName || window.myMemberName || 'مستخدم'),
             senderRole: window.userRole,
             timestamp: Date.now()
         });
-    } catch(e) { window.showNotif('فشل إرسال الرسالة', 'error'); }
+    } catch(e) { console.warn('Chat error:', e); }
 };
 
 // ===== سجل العمليات =====
@@ -4574,6 +5236,7 @@ window.goHome = async () => { // تمت إضافة async هنا
         window.showNotif("تم تصفير الجلسة بنجاح", "success");
         setTimeout(() => { location.reload(); }, 1000);
     };
+
 
 // 1. حالة العضو الميداني: التحقق المشفر
     if (window.userRole === 'member') {
@@ -5512,9 +6175,8 @@ window.loadDesktopStats = async () => {
         }
     } catch(e) { console.warn('Desktop stats failed', e); }
 };
-    // هذا هو وسم الإغلاق الوحيد الذي يجب أن يبقى في نهاية البرمجة
-    </script>
 
+</script>
 
 
 <style>
@@ -5964,6 +6626,25 @@ body.desktop-active {
 #winSubs {
     background: linear-gradient(160deg, #1a0d0d 0%, #1f0f0f 50%, #1a0d0d 100%) !important;
 }
+
+
+/* ===== Design System موحد ===== */
+.ds-card { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:1.25rem; padding:1.25rem; }
+.ds-card-emerald { background:rgba(16,185,129,0.06); border-color:rgba(16,185,129,0.18); }
+.ds-card-blue    { background:rgba(59,130,246,0.06); border-color:rgba(59,130,246,0.18); }
+.ds-card-rose    { background:rgba(220,38,38,0.06);  border-color:rgba(220,38,38,0.18);  }
+.ds-card-amber   { background:rgba(245,158,11,0.06); border-color:rgba(245,158,11,0.18); }
+.ds-card-violet  { background:rgba(139,92,246,0.06); border-color:rgba(139,92,246,0.18); }
+.ds-card-cyan    { background:rgba(6,182,212,0.06);  border-color:rgba(6,182,212,0.18);  }
+.ds-btn { padding:0.5rem 1rem; border-radius:0.875rem; font-weight:900; font-size:0.75rem; transition:all 0.2s; border:1px solid transparent; cursor:pointer; }
+.ds-btn-emerald { background:rgba(16,185,129,0.15); color:#10b981; border-color:rgba(16,185,129,0.3); }
+.ds-btn-rose    { background:rgba(220,38,38,0.15);  color:#f43f5e; border-color:rgba(220,38,38,0.3);  }
+.ds-btn-cyan    { background:rgba(6,182,212,0.15);  color:#06b6d4; border-color:rgba(6,182,212,0.3);  }
+.ds-btn-violet  { background:rgba(139,92,246,0.15); color:#a78bfa; border-color:rgba(139,92,246,0.3); }
+/* ========================== */
+
+
+
 #winTeam {
     background: linear-gradient(160deg, #071a10 0%, #0a1f14 50%, #071a10 100%) !important;
 }
@@ -6022,68 +6703,54 @@ body.desktop-active {
 
 <body class="min-h-screen text-right">
 
-<div id="winERG" class="app-window p-4 md:p-10 italic text-right min-h-screen relative overflow-hidden">
+<div id="winERG" class="app-window bg-[#080b12] text-right" style="padding:0;">
     
     <div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: linear-gradient(#00d1ff 1px, transparent 1px), linear-gradient(90deg, #00d1ff 1px, transparent 1px); background-size: 40px 40px;"></div>
 
+    
     <div class="max-w-6xl w-full mx-auto flex flex-col gap-8 relative z-10">
         
-        <div class="flex justify-between items-center bg-slate-900/80 p-5 md:p-6 rounded-2xl border-b-2 border-cyan-500 shadow-[0_0_25px_rgba(6,182,212,0.2)] backdrop-blur-xl">
-            
-            <div class="flex items-center gap-5">
-                <div class="relative flex items-center justify-center">
-                    <div class="absolute w-full h-full rounded-full bg-cyan-500 animate-ping opacity-20"></div>
-                    <div class="w-14 h-14 md:w-16 md:h-16 bg-cyan-950 border-2 border-cyan-500 rounded-xl flex items-center justify-center text-3xl shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                        📡
-                    </div>
-                </div>
-
-                <div>
-                    <h3 class="text-xl md:text-3xl font-black text-white uppercase tracking-tighter leading-none">
-                        ERG2024-<span class="text-cyan-400">SYSTEM</span>
-                    </h3>
-                    <div class="flex items-center gap-2 mt-1">
-                        <span class="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                        <span class="text-[9px] md:text-[11px] text-cyan-500/70 font-mono tracking-[0.2em] uppercase">
-                            System Status: Encrypted / Link Active
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="hidden md:flex flex-col items-end font-mono text-[10px] text-cyan-600 border-r-2 border-cyan-500/30 pr-4">
-                <div class="flex gap-2">
-                    <span class="text-white/40">COORD:</span>
-                    <span id="hudCoords">31.9632° N / 35.9304° E</span>
-                </div>
-                <div class="flex gap-2">
-                    <span class="text-white/40">SIGNAL:</span>
-                    <span class="text-green-500">STABLE-X9</span>
-                </div>
-            </div>
-
-            <button onclick="window.goHome()" class="close-btn p-3 hover:bg-rose-500/20 rounded-full text-white/30 hover:text-rose-500 transition-all duration-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-
-
-<!-- بانر الترحيب الشخصي - يظهر للعضو فقط -->
-<div id="memberWelcomeBanner" class="hidden items-center gap-4 bg-cyan-950/60 border border-cyan-500/30 rounded-2xl px-6 py-4 shadow-[0_0_20px_rgba(6,182,212,0.1)]">
-    <div class="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-xl flex-shrink-0">🪖</div>
-    <div class="flex-1 text-right">
-        <p class="text-[10px] text-cyan-500/60 font-black uppercase tracking-widest">العضو الميداني النشط</p>
-        <p id="memberWelcomeName" class="text-white font-black text-base italic">—</p>
+<div class="flex justify-between items-center px-6 py-4" style="background:linear-gradient(90deg,rgba(6,182,212,0.1),transparent); border-bottom:1px solid rgba(6,182,212,0.12);">
+    <div class="flex items-center gap-3">
+        <button onclick="window.goHome()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
     </div>
-    <div class="text-right">
-        <p class="text-[10px] text-slate-500 font-black uppercase">حالة الاتصال</p>
-        <p class="text-emerald-400 font-black text-xs flex items-center gap-1 justify-end">
-            <span class="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span> مشفر / نشط
+    <div class="flex items-center gap-4">
+        <div class="text-right">
+            <h3 class="text-white font-black text-sm uppercase tracking-wider">ERG SYSTEM — <span class="text-cyan-400">نظام الاستجابة</span></h3>
+            <div class="flex items-center gap-2 justify-end mt-0.5">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span class="text-[10px] text-cyan-500/60 font-mono uppercase tracking-widest">Encrypted / Link Active</span>
+            </div>
+        </div>
+        <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">📡</div>
+    </div>
+</div>
+
+
+
+<!-- بانر مدمج: ترحيب العضو + إحداثيات GPS + حالة الاتصال — متصل بصرياً بالشريط العلوي -->
+<div id="memberWelcomeBanner" class="hidden items-center gap-3 bg-cyan-950/60 border border-t-0 border-cyan-500/30 rounded-b-2xl px-5 py-3 -mt-px shadow-[0_0_20px_rgba(6,182,212,0.1)]">
+    <div class="w-9 h-9 bg-cyan-500/20 rounded-xl flex items-center justify-center text-lg flex-shrink-0">🪖</div>
+    <div class="flex-1 text-right min-w-0">
+        <p class="text-[9px] text-cyan-500/60 font-black uppercase tracking-widest leading-none">العضو الميداني النشط</p>
+        <p id="memberWelcomeName" class="text-white font-black text-sm italic truncate">—</p>
+    </div>
+    <div class="hidden sm:flex flex-col items-end font-mono text-[9px] text-cyan-600 border-r border-cyan-500/20 pr-3 flex-shrink-0 leading-relaxed">
+        <span id="hudCoords">31.9632° N / 35.9304° E</span>
+        <span class="text-green-500">SIGNAL: STABLE-X9</span>
+    </div>
+    <div class="text-right flex-shrink-0 border-r border-cyan-500/20 pr-3">
+        <p class="text-[9px] text-slate-500 font-black uppercase leading-none mb-0.5">الاتصال</p>
+        <p class="text-emerald-400 font-black text-[11px] flex items-center gap-1 justify-end">
+            <span class="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span> مشفر/نشط
         </p>
     </div>
 </div>
+
+
+
+
+
 
 
 <div class="glass p-6 md:p-8 rounded-[3rem] md:rounded-[4rem] space-y-6 relative z-[500]">
@@ -6509,24 +7176,58 @@ body.desktop-active {
                     <span class="text-xl">🔐</span>
                 </div>
                 <h3 class="text-white font-black text-lg italic">إدخال رمز الوصول</h3>
-                <p class="text-slate-500 text-xs font-bold">أدخل الكود الذي تلقيته من الإدارة</p>
+                <p class="text-slate-500 text-xs font-bold">حدّد نوع الحساب أولاً ثم أدخل الكود</p>
             </div>
 
-            <!-- حقل الكود -->
-            <input type="password" id="activationInput"
-                   placeholder="• • • • • • • •"
-                   onkeydown="if(event.key==='Enter') window.activateApp()"
-                   class="w-full p-6 rounded-[1.5rem] text-center text-white text-3xl font-mono outline-none transition-all"
-                   style="background:rgba(0,0,0,0.5);
-                          border:1px solid rgba(255,255,255,0.1);
-                          letter-spacing:0.3em;
-                          caret-color:#3b82f6;
-                          box-shadow:inset 0 2px 8px rgba(0,0,0,0.35);">
+            <!-- اختيار نوع الحساب -->
+            <div id="loginTypeSelector" class="grid grid-cols-3 gap-2">
+                <button onclick="window.selectLoginType('leader')" id="loginTypeBtn_leader"
+                        class="py-4 rounded-2xl text-center transition-all border"
+                        style="background:rgba(99,102,241,0.08); border-color:rgba(99,102,241,0.25);">
+                    <span class="block text-xl mb-1">🎖️</span>
+                    <span class="text-[11px] font-black text-indigo-300">قائد</span>
+                </button>
+                <button onclick="window.selectLoginType('member')" id="loginTypeBtn_member"
+                        class="py-4 rounded-2xl text-center transition-all border"
+                        style="background:rgba(16,185,129,0.08); border-color:rgba(16,185,129,0.25);">
+                    <span class="block text-xl mb-1">👤</span>
+                    <span class="text-[11px] font-black text-emerald-300">عضو ميداني</span>
+                </button>
+                <button onclick="window.selectLoginType('admin')" id="loginTypeBtn_admin"
+                        class="py-4 rounded-2xl text-center transition-all border"
+                        style="background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.25);">
+                    <span class="block text-xl mb-1">🛡️</span>
+                    <span class="text-[11px] font-black text-rose-300">الإدارة</span>
+                </button>
+            </div>
+
+            <!-- حقل الكود (يظهر بعد اختيار النوع) -->
+            <div id="codeInputWrap" class="hidden space-y-3">
+                <div id="prefixedInputRow" class="hidden flex items-center rounded-[1.5rem] overflow-hidden"
+                     style="background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); box-shadow:inset 0 2px 8px rgba(0,0,0,0.35);">
+                    <span id="codePrefixLabel" class="px-4 text-slate-400 font-mono text-xl font-black select-none">LDR-</span>
+                    <input type="text" id="activationInputSuffix"
+                           placeholder="XXXXXXX"
+                           onkeydown="if(event.key==='Enter') window.activateApp()"
+                           class="flex-1 p-6 text-center text-white text-2xl font-mono outline-none bg-transparent uppercase"
+                           style="letter-spacing:0.2em; caret-color:#3b82f6;">
+                </div>
+
+                <input type="password" id="activationInput"
+                       placeholder="• • • • • • • •"
+                       onkeydown="if(event.key==='Enter') window.activateApp()"
+                       class="hidden w-full p-6 rounded-[1.5rem] text-center text-white text-3xl font-mono outline-none transition-all"
+                       style="background:rgba(0,0,0,0.5);
+                              border:1px solid rgba(255,255,255,0.1);
+                              letter-spacing:0.3em;
+                              caret-color:#3b82f6;
+                              box-shadow:inset 0 2px 8px rgba(0,0,0,0.35);">
+            </div>
 
             <p id="loginMsg" class="text-center text-sm font-bold italic text-rose-400 min-h-[20px]"></p>
 
             <!-- أزرار الإجراء -->
-            <div class="flex gap-3">
+            <div id="loginActionBtns" class="hidden flex gap-3">
                 <button onclick="window.activateApp()"
                         class="flex-1 py-5 rounded-[1.5rem] font-black text-white uppercase italic transition-all active:scale-95"
                         style="background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);
@@ -6715,7 +7416,7 @@ body.desktop-active {
 
             <!-- العنوان -->
             <div class="space-y-1">
-                <h3 class="text-2xl font-black text-white italic uppercase"
+                <h3 id="otpModalTitle" class="text-2xl font-black text-white italic uppercase"
                     style="text-shadow: 0 0 30px rgba(96,165,250,0.3);">
                     التحقق من الهوية
                 </h3>
@@ -6849,222 +7550,171 @@ body.desktop-active {
 
 
 
-<main id="os_desktop" class="max-w-5xl mx-auto px-6 py-20 md:py-24 flex flex-col items-center justify-center min-h-screen hidden relative">
-    
-    <div class="absolute inset-0 pointer-events-none" style="background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px); background-size: 40px 40px;"></div>
-    <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse at 50% 0%, rgba(220,38,38,0.06) 0%, transparent 60%);"></div>
+<main id="os_desktop" class="w-full min-h-screen hidden relative flex flex-col items-center justify-center" style="background:#080810;">
 
-    <!-- لوحة الترحيب -->
-    <div class="text-center mb-12 relative z-10 animate-in fade-in duration-500">
-        <!-- خط علوي مزخرف -->
-        <div class="flex items-center justify-center gap-3 mb-4">
-            <div class="h-px w-16" style="background:linear-gradient(to left,rgba(220,38,38,0.4),transparent)"></div>
-            <div class="w-1.5 h-1.5 rounded-full bg-rose-500/60 animate-pulse"></div>
-            <div class="h-px w-16" style="background:linear-gradient(to right,rgba(220,38,38,0.4),transparent)"></div>
-        </div>
-        <p class="text-slate-600 text-[9px] uppercase tracking-[0.5em] font-black mb-2">مرحباً بعودتك</p>
-        <h2 id="welcomeName" class="text-3xl md:text-4xl font-black italic text-white mb-2 leading-tight"
-            style="text-shadow: 0 0 30px rgba(255,255,255,0.1);">القائد</h2>
-        <div id="welcomeRole" class="text-[9px] font-black uppercase tracking-[0.35em] text-rose-500/80 mb-1"></div>
-        <!-- شريط تحت الاسم -->
+    <!-- خلفية -->
+    <div class="absolute inset-0 pointer-events-none">
+        <div class="absolute top-0 left-1/3 w-80 h-80 rounded-full opacity-8 blur-3xl" style="background:radial-gradient(circle,#e11d48,transparent)"></div>
+        <div class="absolute bottom-0 right-1/3 w-80 h-80 rounded-full opacity-8 blur-3xl" style="background:radial-gradient(circle,#4f46e5,transparent)"></div>
+        <div class="absolute inset-0" style="background-image:radial-gradient(circle,rgba(255,255,255,0.025) 1px,transparent 1px);background-size:36px 36px;"></div>
+    </div>
+
+    <!-- ترحيب -->
+    <div class="relative z-10 text-center mb-8">
+        <p class="text-[9px] text-slate-600 uppercase tracking-[0.5em] font-black mb-1">مرحباً بعودتك</p>
+        <h2 id="welcomeName" class="text-3xl font-black italic text-white mb-1" style="text-shadow:0 0 30px rgba(255,255,255,0.1);">المدير</h2>
+        <div id="welcomeRole" class="text-[9px] font-black uppercase tracking-[0.35em] text-rose-500/70"></div>
         <div class="flex items-center justify-center gap-2 mt-2">
             <div class="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span class="text-emerald-600/60 text-[8px] font-black uppercase tracking-[0.4em]">Active Session</span>
+            <span class="text-emerald-600/50 text-[8px] font-black uppercase tracking-[0.4em]">Active Session</span>
             <div class="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
         </div>
     </div>
 
-<div class="grid grid-cols-3 md:grid-cols-4 gap-8 md:gap-14 relative z-10 animate-in fade-in zoom-in duration-700" style="max-width:680px;">
+    <!-- Grid منتظم 4×3 -->
+    <div class="relative z-10 grid grid-cols-4 gap-4" style="width:640px;">
 
-        <!-- 1 نظام الاستجابة -->
-        <button id="app_erg" onclick="window.openWin('winERG')" class="app-container group">
-            <div class="app-icon-wrapper border-blue-600/50 group-hover:shadow-[0_0_30px_rgba(37,99,235,0.4)]">
-                <svg class="w-14 h-14 text-blue-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(96,165,250,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
-                </svg>
-                <div class="scan-line bg-blue-600"></div>
+        <!-- نظام الاستجابة -->
+        <button id="app_erg" onclick="window.openWin('winERG')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(37,99,235,0.2);">
+                <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
             </div>
-            <span class="app-label">نظام الاستجابة</span>
+            <span class="text-white text-xs font-black text-center">نظام الاستجابة</span>
         </button>
 
-        <!-- 2 إدارة القادة -->
-        <button id="app_subs" onclick="window.openWin('winSubs')" class="app-container group">
-            <div class="app-icon-wrapper border-rose-600/50 group-hover:shadow-[0_0_30px_rgba(225,29,72,0.4)]">
-                <svg class="w-14 h-14 text-rose-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(251,113,133,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z"/>
-                </svg>
-                <div class="scan-line bg-rose-600"></div>
+        <!-- إدارة القادة -->
+        <button id="app_subs" onclick="window.openWin('winSubs')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(225,29,72,0.1);border:1px solid rgba(225,29,72,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(225,29,72,0.2);">
+                <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z"/></svg>
             </div>
-            <span class="app-label">إدارة القادة</span>
+            <span class="text-white text-xs font-black text-center">إدارة القادة</span>
         </button>
 
-        <!-- 3 إدارة الفريق -->
-        <button id="app_team" onclick="window.openWin('winTeam')" class="app-container group">
-            <div class="app-icon-wrapper border-indigo-600/50 group-hover:shadow-[0_0_30px_rgba(79,70,229,0.4)]">
-                <svg class="w-14 h-14 text-indigo-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(129,140,248,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
-                </svg>
-                <div class="scan-line bg-indigo-600"></div>
+        <!-- إدارة الفريق -->
+        <button id="app_team" onclick="window.openWin('winTeam')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(79,70,229,0.1);border:1px solid rgba(79,70,229,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(79,70,229,0.2);">
+                <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
             </div>
-            <span class="app-label">إدارة الفريق</span>
+            <span class="text-white text-xs font-black text-center">إدارة الفريق</span>
         </button>
 
-        <!-- 4 سجل البلاغات -->
-        <button id="app_reps" onclick="window.openWin('winReports')" class="app-container group relative">
-            <div class="app-icon-wrapper border-emerald-600/50 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                <svg class="w-14 h-14 text-emerald-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
-                </svg>
-                <div class="scan-line bg-emerald-600"></div>
+        <!-- سجل البلاغات -->
+        <button id="app_reps" onclick="window.openWin('winReports')"
+            class="group relative col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);height:140px;">
+            <span id="reportsBadge" class="hidden absolute -top-2 -right-2 w-6 h-6 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-black animate-pulse z-10">0</span>
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(16,185,129,0.2);">
+                <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
             </div>
-            <span id="reportsBadge" class="hidden absolute -top-2 -right-2 w-7 h-7 bg-rose-600 text-white text-xs font-black rounded-full flex items-center justify-center shadow-lg border-2 border-black animate-pulse z-10">0</span>
-            <span class="app-label">سجل البلاغات</span>
+            <span class="text-white text-xs font-black text-center">سجل البلاغات</span>
         </button>
 
-        <!-- 5 رادار المواقع -->
-        <button id="app_map" onclick="window.openWin('winMap')" class="app-container group">
-            <div class="app-icon-wrapper border-cyan-600/50 group-hover:shadow-[0_0_30px_rgba(8,145,178,0.4)]">
-                <svg class="w-14 h-14 text-cyan-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
-                </svg>
-                <div class="scan-line bg-cyan-600"></div>
+        <!-- رادار المواقع -->
+        <button id="app_map" onclick="window.openWin('winMap')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(8,145,178,0.2);">
+                <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
             </div>
-            <span class="app-label">رادار المواقع</span>
+            <span class="text-white text-xs font-black text-center">رادار المواقع</span>
         </button>
 
-        <!-- 6 الأرشيف الرقمي -->
-        <button id="app_cloud" onclick="window.openWin('winCloud')" class="app-container group">
-            <div class="app-icon-wrapper border-slate-600/50 group-hover:shadow-[0_0_30px_rgba(71,85,105,0.4)]">
-                <svg class="w-14 h-14 text-slate-300 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(203,213,225,0.5)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/>
-                </svg>
-                <div class="scan-line bg-slate-600"></div>
+        <!-- الأرشيف الرقمي -->
+        <button id="app_cloud" onclick="window.openWin('winCloud')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(71,85,105,0.1);border:1px solid rgba(71,85,105,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(71,85,105,0.2);">
+                <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>
             </div>
-            <span class="app-label">الأرشيف الرقمي</span>
+            <span class="text-white text-xs font-black text-center">الأرشيف الرقمي</span>
         </button>
 
-        <!-- 7 أمان النظام -->
-        <button id="app_config" onclick="window.openWin('winConfig')" class="app-container group">
-            <div class="app-icon-wrapper border-orange-600/50 group-hover:shadow-[0_0_30px_rgba(234,88,12,0.4)]">
-                <svg class="w-14 h-14 text-orange-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(251,146,60,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
-                </svg>
-                <div class="scan-line bg-orange-600"></div>
+        <!-- أمان النظام -->
+        <button id="app_config" onclick="window.openWin('winConfig')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(234,88,12,0.1);border:1px solid rgba(234,88,12,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(234,88,12,0.2);">
+                <svg class="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
             </div>
-            <span class="app-label">أمان النظام</span>
+            <span class="text-white text-xs font-black text-center">أمان النظام</span>
         </button>
 
-        <!-- 8 رفع بيانات ERG -->
-        <button id="app_import" onclick="window.openWin('winImport')" class="app-container group">
-            <div class="app-icon-wrapper border-cyan-400/50 group-hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]">
-                <svg class="w-14 h-14 text-cyan-300 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(103,232,249,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-                </svg>
-                <div class="scan-line bg-cyan-400"></div>
+        <!-- رفع بيانات ERG -->
+        <button id="app_import" onclick="window.openWin('winImport')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(34,211,238,0.15);">
+                <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
             </div>
-            <span class="app-label">رفع بيانات ERG</span>
-        </button>
-<!-- 9 إدارة المالية والاشتراكات -->
-        <button id="app_finance" onclick="window.openWin('winFinance')" class="app-container group">
-            <div class="app-icon-wrapper border-emerald-500/50 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                <svg class="w-14 h-14 text-emerald-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/>
-                </svg>
-                <div class="scan-line bg-emerald-500"></div>
-            </div>
-            <span class="app-label">المالية والاشتراكات</span>
+            <span class="text-white text-xs font-black text-center">رفع بيانات ERG</span>
         </button>
 
-        <!-- 9 لوحة الإحصاء -->
-        <button id="app_dashboard" onclick="window.openWin('winDashboard')" class="app-container group">
-            <div class="app-icon-wrapper border-violet-500/50 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]">
-                <svg class="w-14 h-14 text-violet-400 group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.6)]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
-                </svg>
-                <div class="scan-line bg-violet-500"></div>
+        <!-- المالية والاشتراكات -->
+        <button id="app_finance" onclick="window.openWin('winFinance')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(16,185,129,0.2);">
+                <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
             </div>
-            <span class="app-label">لوحة الإحصاء</span>
+            <span class="text-white text-xs font-black text-center">المالية والاشتراكات</span>
+        </button>
+
+
+
+<!-- بلاغ طارئ — للعضو فقط -->
+        <button id="app_emergency" onclick="window.openEmergencyReport()"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="display:none; background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.4);height:140px; animation:pulse 2s infinite;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(220,38,38,0.2);">
+                <span style="font-size:1.5rem;">🚨</span>
+            </div>
+            <span class="text-rose-400 text-xs font-black text-center">بلاغ طارئ</span>
+        </button>
+
+        <!-- لوحة الإحصاء -->
+        <button id="app_dashboard" onclick="window.openWin('winDashboard')"
+            class="group col-span-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95"
+            style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);height:140px;">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style="background:rgba(139,92,246,0.2);">
+                <svg class="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
+            </div>
+            <span class="text-white text-xs font-black text-center">لوحة الإحصاء</span>
         </button>
 
     </div>
 
     <!-- شريط الإحصائيات -->
-    <div id="desktopStats" class="hidden mt-10 relative z-10 animate-in fade-in duration-700">
-        <div class="flex items-center gap-6 justify-center px-8 py-4 rounded-2xl"
-             style="background:rgba(255,255,255,0.03);
-                    border:1px solid rgba(255,255,255,0.06);
-                    border-top:1px solid rgba(255,255,255,0.10);">
-            <div class="text-center">
-                <div id="statMaterials" class="text-xl font-black italic text-cyan-400"
-                     style="text-shadow:0 0 12px rgba(34,211,238,0.3)">--</div>
-                <div class="text-[9px] text-slate-600 uppercase font-black mt-0.5 tracking-widest">مادة</div>
-            </div>
-            <div class="w-px h-8 bg-white/8"></div>
-            <div class="text-center">
-                <div id="statMembers" class="text-xl font-black italic text-emerald-400"
-                     style="text-shadow:0 0 12px rgba(52,211,153,0.3)">--</div>
-                <div class="text-[9px] text-slate-600 uppercase font-black mt-0.5 tracking-widest">عضو نشط</div>
-            </div>
-            <div class="w-px h-8 bg-white/8"></div>
-            <div class="text-center">
-                <div id="statDate" class="text-sm font-black italic text-slate-500">--</div>
-                <div class="text-[9px] text-slate-600 uppercase font-black mt-0.5 tracking-widest">آخر مزامنة</div>
-            </div>
+    <div id="desktopStats" class="hidden relative z-10 mt-6" style="width:640px;">
+        <div class="flex items-center gap-4 justify-center px-6 py-3 rounded-xl" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">
+            <div class="text-center"><div id="statMaterials" class="text-lg font-black italic text-cyan-400">--</div><div class="text-[9px] text-slate-600 uppercase font-black tracking-widest">مادة</div></div>
+            <div class="w-px h-6 bg-white/5"></div>
+            <div class="text-center"><div id="statMembers" class="text-lg font-black italic text-emerald-400">--</div><div class="text-[9px] text-slate-600 uppercase font-black tracking-widest">عضو</div></div>
+            <div class="w-px h-6 bg-white/5"></div>
+            <div class="text-center"><div id="statReports" class="text-lg font-black italic text-rose-400">--</div><div class="text-[9px] text-slate-600 uppercase font-black tracking-widest">بلاغ</div></div>
+            <div class="w-px h-6 bg-white/5"></div>
+            <div class="text-center"><div id="statSubs" class="text-lg font-black italic text-violet-400">--</div><div class="text-[9px] text-slate-600 uppercase font-black tracking-widest">مشترك</div></div>
         </div>
     </div>
 
-<!-- شريط أدوات سريعة: القناة + الفريق + التجديد -->
-<div class="flex flex-wrap items-center justify-center gap-3 mt-8 relative z-10">
 
-    <!-- زر فتح المحادثة -->
-    <div id="chatBtn" class="hidden">
-        <button onclick="window.openChat()"
-                class="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-blue-400 hover:text-white transition-all text-sm relative"
-                style="background:rgba(37,99,235,0.10);
-                       border:1px solid rgba(37,99,235,0.22);
-                       border-bottom:2px solid rgba(37,99,235,0.35);">
-            💬 <span>القناة الداخلية</span>
-            <span id="chatUnreadBadge"
-                  class="hidden absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</span>
+
+    <!-- القناة الداخلية -->
+    <div class="relative z-10 flex justify-center mt-5 pb-4">
+        <button id="chatToggleBtn" onclick="window.toggleChat()"
+            class="flex items-center gap-2 px-5 py-2 rounded-full text-xs font-black text-white/50 hover:text-white transition-all"
+            style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);">
+            💬 القناة الداخلية
+            <span id="chatBadge" class="hidden w-4 h-4 bg-rose-500 rounded-full text-[9px] flex items-center justify-center text-white font-black">0</span>
         </button>
     </div>
-
-    <!-- عداد الفريق للقائد -->
-    <div id="leaderTeamCounter" class="hidden">
-        <div class="flex items-center gap-2 px-5 py-3 rounded-2xl"
-             style="background:rgba(16,185,129,0.08);
-                    border:1px solid rgba(16,185,129,0.20);
-                    border-bottom:2px solid rgba(16,185,129,0.32);">
-            <span class="text-emerald-400 font-black text-sm">👥</span>
-            <span id="leaderMemberCount" class="text-white font-black">0</span>
-            <span class="text-slate-500 text-xs font-bold">/</span>
-            <span id="leaderMaxCount" class="text-slate-400 text-xs font-bold">5</span>
-            <span class="text-slate-600 text-[10px] font-black uppercase tracking-wide">عضو</span>
-        </div>
-    </div>
-
-    <!-- زر تجديد الاشتراك -->
-    <div id="renewalBtn" class="hidden">
-        <button onclick="window.requestRenewal()"
-                class="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-amber-400 hover:text-white transition-all text-sm"
-                style="background:rgba(245,158,11,0.08);
-                       border:1px solid rgba(245,158,11,0.22);
-                       border-bottom:2px solid rgba(245,158,11,0.35);">
-            🔄 <span>تجديد الاشتراك</span>
-        </button>
-    </div>
-
-</div>
 
 </main>
-
-
-
-
-
-
-
 
 
 
@@ -7079,27 +7729,30 @@ body.desktop-active {
         🔊
     </button>
 
+    
     <button onclick="window.scrollToWinTop()" title="إلى الأعلى" 
             class="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-3xl shadow-2xl hover:scale-110 transition-all border-b-4 border-slate-950">
         🔝
     </button>
 </div>
 
-
 <!-- ============================================ -->
 <!-- نافذة رفع بيانات ERG — النسخة المطورة       -->
 <!-- ============================================ -->
-<div id="winImport" class="app-window p-6 bg-black/40 italic text-right">
-    <div class="max-w-4xl w-full mx-auto h-full flex flex-col gap-6">
-
-        <!-- Header -->
-        <div class="flex justify-between items-center bg-cyan-600/10 p-8 rounded-[3rem] border border-cyan-600/20 text-cyan-400">
-            <div>
-                <h3 class="text-3xl font-black italic uppercase">📥 محرر بيانات ERG</h3>
-                <p class="text-xs text-cyan-600 mt-1 font-bold">رفع ملف JSON أو لصق البيانات — مع تحقق وإحصائيات</p>
+<div id="winImport" class="app-window bg-[#080b12] italic text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(6,182,212,0.1),transparent); border-bottom:1px solid rgba(6,182,212,0.12);">
+            <button onclick="window.closeWin('winImport')" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">📥 محرر بيانات ERG</p>
+                    <p class="text-cyan-400/50 text-[10px] font-mono uppercase tracking-widest">Data Import & Sync Engine</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">⚙️</div>
             </div>
-            <button onclick="window.closeWin('winImport')" class="text-3xl hover:scale-110 transition-transform">✕</button>
         </div>
+        <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+
 
         <!-- إحصائيات قاعدة البيانات الحالية -->
         <div class="glass p-6 rounded-[2rem] border border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -7290,82 +7943,85 @@ body.desktop-active {
                 class="w-full py-4 bg-rose-600/10 border border-rose-500/30 rounded-2xl font-black text-rose-400 text-sm hover:bg-rose-600/20 transition-all">
                 🗑️ مسح كل بيانات ERG (المواد + الأدلة) فقط
             </button>
+</div>
         </div>
-
     </div>
 </div>
 
 
     <!-- أمان النظام ومزامنة السحابة (مجمد) -->
-    <div id="winConfig" class="app-window p-10 bg-black/95 italic text-right">
-        <div class="max-w-6xl w-full mx-auto h-full flex flex-col gap-10 text-right">
-            <div class="flex justify-between items-center bg-orange-600/10 p-10 rounded-[4rem] border border-orange-600/20 shadow-3xl text-orange-500">
-                <h3 class="text-4xl font-black italic uppercase">أمان النظام والتحكم الاستراتيجي</h3>
-                <button onclick="window.closeWin('winConfig')" class="text-4xl">✕</button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-10 text-right">
-
-                <!-- البطاقة 1: المصادقة الثنائية -->
-                <div class="glass p-10 rounded-[5rem] border-t-[10px] border-rose-600 space-y-6">
-                    <h4 class="text-xl font-black italic border-b border-white/5 pb-4 uppercase">🔐 المصادقة الثنائية (2FA / TOTP)</h4>
-                    <div class="bg-black/40 p-6 rounded-3xl space-y-4">
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400 text-sm italic">تفعيل TOTP:</span>
-                            <label class="switch"><input type="checkbox" id="otpToggle"><span class="slider"></span></label>
-                        </div>
-                        <div class="space-y-1">
-                            <span class="text-slate-500 text-[10px] uppercase font-black">Secret Key (Base32):</span>
-                            <div id="totpSecretDisplay" class="font-mono text-emerald-400 text-sm font-bold tracking-[0.2em] bg-black p-3 rounded-xl border border-white/5 uppercase">---</div>
-                            <button onclick="window.generateNewTOTPSecret()" class="w-full py-3 mt-2 bg-emerald-600/20 border border-emerald-500/30 rounded-2xl text-emerald-400 text-xs font-black italic">🔑 توليد سر OTP جديد</button>
-                        </div>
-                    </div>
+<div id="winConfig" class="app-window bg-[#080b12] italic text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(245,158,11,0.1),transparent); border-bottom:1px solid rgba(245,158,11,0.12);">
+            <button onclick="window.closeWin('winConfig')" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">أمان النظام والتحكم</p>
+                    <p class="text-amber-400/50 text-[10px] font-mono uppercase tracking-widest">System Security Control</p>
                 </div>
-
-                <!-- البطاقة 2: تغيير الشفرة السيادية -->
-                <div class="glass p-10 rounded-[5rem] border-t-[10px] border-amber-600 space-y-6">
-                    <h4 class="text-xl font-black italic border-b border-white/5 pb-4 uppercase">🛡️ الشفرة السيادية للمدير الأعلى</h4>
-                    <div class="bg-black/40 p-6 rounded-3xl space-y-4">
-                        <div class="space-y-1">
-                            <span class="text-slate-500 text-[10px] uppercase font-black">الشفرة الحالية:</span>
-                            <div id="currentMasterKeyDisplay" class="font-mono text-rose-500 text-lg font-black tracking-tighter italic">---</div>
-                        </div>
-                        <div class="pt-4 border-t border-white/5 space-y-3">
-                            <input type="text" id="newMasterKeyInput" placeholder="شفرة مدير جديدة" class="w-full bg-black/60 p-4 rounded-2xl border border-white/10 text-white font-mono uppercase outline-none italic text-right">
-                            <button onclick="window.updateMasterSecurity()" class="w-full py-5 bg-rose-600 rounded-2xl font-black text-white italic shadow-3xl transition-all">حفظ الأمان السيادي</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- البطاقة 3: البيانات والنسخ الاحتياطي -->
-                <div class="glass p-10 rounded-[5rem] border-t-[10px] border-cyan-500 space-y-6">
-                    <h4 class="text-xl font-black italic border-b border-white/5 pb-4 uppercase">☁️ البيانات والنسخ الاحتياطي</h4>
-                    <div class="flex flex-col items-center gap-4 p-4">
-                        <div id="syncIcon" class="w-16 h-16 bg-cyan-600/20 rounded-full flex items-center justify-center text-4xl shadow-xl border border-cyan-500/20">🔄</div>
-                        <button onclick="window.forceCloudSync()" class="w-full py-5 bg-cyan-600 rounded-3xl font-black text-white italic shadow-3xl hover:brightness-110 transition-all uppercase">تحديث السحابة الآن</button>
-                    </div>
-                    <button onclick="window.exportRegistryBackup()" class="w-full py-5 bg-slate-800 border border-white/5 rounded-3xl font-black hover:bg-slate-700 italic transition-all">تصدير قاعدة البيانات (.json)</button>
-                    <input type="file" id="restoreFile" class="hidden" onchange="window.importBackup(this.files[0])">
-                    <button onclick="document.getElementById('restoreFile').click()" class="w-full py-5 bg-blue-600 rounded-3xl font-black text-white italic shadow-3xl uppercase">📂 استعادة النظام من ملف</button>
-                </div>
-
-                <!-- البطاقة 4: سجل العمليات الأمنية -->
-                <div class="glass p-10 rounded-[5rem] border-t-[10px] border-violet-600 space-y-6 flex flex-col">
-                    <div class="flex justify-between items-center border-b border-white/5 pb-4">
-                        <h4 class="text-xl font-black italic uppercase">📋 سجل العمليات الأمنية</h4>
-                        <button onclick="window.loadSecurityLog()"
-                            class="text-xs bg-violet-600/20 hover:bg-violet-600 text-violet-400 hover:text-white px-4 py-2 rounded-xl transition-all font-black border border-violet-600/30">
-                            🔄 تحديث
-                        </button>
-                    </div>
-                    <div id="securityLogCont" class="space-y-3 max-h-80 overflow-y-auto flex-1">
-                        <p class="text-slate-500 text-center italic font-black py-6">اضغط تحديث لعرض السجل</p>
-                    </div>
-                </div>
-
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.25);">🛡️</div>
             </div>
         </div>
-    </div>
+        <div class="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
 
+            <!-- البطاقة 1: المصادقة الثنائية -->
+            <div class="rounded-2xl p-5 space-y-4" style="background:rgba(220,38,38,0.06); border:1px solid rgba(220,38,38,0.18);">
+                <h4 class="text-sm font-black uppercase text-rose-400 border-b border-white/5 pb-3">🔐 المصادقة الثنائية (TOTP)</h4>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="switch"><input type="checkbox" id="otpToggle"><span class="slider"></span></label>
+                        <span class="text-slate-400 text-xs font-bold">تفعيل TOTP</span>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-slate-500 text-[10px] uppercase font-black">Secret Key (Base32):</span>
+                        <div id="totpSecretDisplay" class="font-mono text-emerald-400 text-xs font-bold tracking-widest rounded-xl p-3" style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06);">---</div>
+                        <button onclick="window.generateNewTOTPSecret()" class="w-full py-2.5 rounded-xl text-emerald-400 text-xs font-black transition-all" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25);">🔑 توليد سر OTP جديد</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- البطاقة 2: الشفرة السيادية -->
+            <div class="rounded-2xl p-5 space-y-4" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.18);">
+                <h4 class="text-sm font-black uppercase text-amber-400 border-b border-white/5 pb-3">🛡️ الشفرة السيادية</h4>
+                <div class="space-y-3">
+                    <div>
+                        <span class="text-slate-500 text-[10px] uppercase font-black">الشفرة الحالية:</span>
+                        <div id="currentMasterKeyDisplay" class="font-mono text-rose-400 text-sm font-black tracking-widest mt-1">---</div>
+                    </div>
+                    <input type="text" id="newMasterKeyInput" placeholder="شفرة مدير جديدة"
+                        class="w-full rounded-xl p-3 text-white font-mono uppercase outline-none text-right text-sm"
+                        style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.08);">
+                    <button onclick="window.updateMasterSecurity()" class="w-full py-3 rounded-xl font-black text-white text-sm transition-all" style="background:rgba(220,38,38,0.8);">حفظ الأمان السيادي</button>
+                </div>
+            </div>
+
+            <!-- البطاقة 3: البيانات والنسخ -->
+            <div class="rounded-2xl p-5 space-y-4" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.18);">
+                <h4 class="text-sm font-black uppercase text-cyan-400 border-b border-white/5 pb-3">☁️ البيانات والنسخ الاحتياطي</h4>
+                <div class="space-y-2">
+                    <button onclick="window.forceCloudSync()" class="w-full py-3 rounded-xl font-black text-white text-sm transition-all" style="background:rgba(6,182,212,0.2); border:1px solid rgba(6,182,212,0.3);">🔄 تحديث السحابة الآن</button>
+                    <button onclick="window.exportRegistryBackup()" class="w-full py-3 rounded-xl font-black text-slate-300 text-sm transition-all" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">💾 تصدير قاعدة البيانات</button>
+                    <input type="file" id="restoreFile" class="hidden" onchange="window.importBackup(this.files[0])">
+                    <button onclick="document.getElementById('restoreFile').click()" class="w-full py-3 rounded-xl font-black text-white text-sm transition-all" style="background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.3);">📂 استعادة من ملف</button>
+                </div>
+            </div>
+
+            <!-- البطاقة 4: سجل العمليات -->
+            <div class="rounded-2xl p-5 space-y-4 flex flex-col" style="background:rgba(139,92,246,0.06); border:1px solid rgba(139,92,246,0.18);">
+                <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                    <button onclick="window.loadSecurityLog()" class="text-xs px-3 py-1.5 rounded-xl font-black text-violet-400 transition-all" style="background:rgba(139,92,246,0.1); border:1px solid rgba(139,92,246,0.25);">🔄 تحديث</button>
+                    <h4 class="text-sm font-black uppercase text-violet-400">📋 سجل العمليات</h4>
+                </div>
+                <div id="securityLogCont" class="space-y-2 overflow-y-auto flex-1" style="max-height:220px;">
+                    <p class="text-slate-500 text-center text-xs font-black py-4">اضغط تحديث لعرض السجل</p>
+                </div>
+            </div>
+
+        </div>
+        </div>
+    </div>
+</div>
 
 
 <div id="winFinance" class="app-window bg-[#080b12] text-right" style="padding:0;">
@@ -7389,16 +8045,18 @@ body.desktop-active {
         <!-- إحصائيات سريعة -->
         <div id="financeStats" class="px-6 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);"></div>
 
-        <!-- تبويبات محسّنة -->
+        <!-- تبويبات -->
         <div class="flex gap-1 px-6 py-3 shrink-0" style="background:#080b12; border-bottom:1px solid rgba(255,255,255,0.05);">
             <button onclick="window.financeTab('pending')" id="ftab_pending"
                 class="finance-tab active-ftab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-emerald-400 transition-all"
                 style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
                 ⏳ الطلبات المعلقة
+                <span id="ftab_pending_badge" class="hidden text-[9px] font-black px-1.5 py-0.5 rounded-full" style="background:rgba(16,185,129,0.3);">0</span>
             </button>
             <button onclick="window.financeTab('trials')" id="ftab_trials"
                 class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
                 🎯 التجارب المجانية
+                <span id="ftab_trials_badge" class="hidden text-[9px] font-black px-1.5 py-0.5 rounded-full" style="background:rgba(245,158,11,0.3); color:#f59e0b;">0</span>
             </button>
             <button onclick="window.financeTab('payments')" id="ftab_payments"
                 class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
@@ -7407,8 +8065,10 @@ body.desktop-active {
             <button onclick="window.financeTab('blocked')" id="ftab_blocked"
                 class="finance-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 transition-all hover:text-white border border-transparent hover:border-white/10">
                 🚫 المحظورون
+                <span id="ftab_blocked_badge" class="hidden text-[9px] font-black px-1.5 py-0.5 rounded-full" style="background:rgba(220,38,38,0.3); color:#f43f5e;">0</span>
             </button>
         </div>
+
 
         <!-- محتوى التبويبات -->
         <div class="flex-1 overflow-hidden p-6">
@@ -7437,12 +8097,16 @@ body.desktop-active {
 
             <!-- سجل الدفعات -->
             <div id="fpanel_payments" class="h-full flex-col gap-4 hidden">
-                <div class="flex items-center justify-between">
-                    <div class="flex gap-2">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex gap-2 shrink-0">
                         <button onclick="window.loadPayments()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث</button>
-                        <button onclick="window.exportSubscribersPDF()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all">📄 تصدير PDF</button>
+                        <button onclick="window.exportSubscribersPDF()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all">📄 PDF</button>
                     </div>
-                    <span class="text-slate-500 text-xs font-black uppercase">المشتركون المعتمدون والنشطون</span>
+                    <input id="paymentsSearch" type="text" placeholder="بحث باسم أو كود..."
+                        oninput="window.filterPayments(this.value)"
+                        class="flex-1 rounded-xl px-3 py-1.5 text-white text-xs font-bold outline-none text-right transition-all"
+                        style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.08);">
+                    <span class="text-slate-500 text-xs font-black uppercase shrink-0">المشتركون النشطون</span>
                 </div>
                 <div id="finPaymentsList" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                     <p class="text-center text-slate-600 text-xs py-16">جاري التحميل...</p>
@@ -7655,81 +8319,73 @@ body.desktop-active {
                     <table class="w-full text-right border-collapse text-xs">
                     <thead class="sticky top-0 border-b border-white/5" style="background:#0f0f18;">
                         <tr>
-                            <th class="px-4 py-2.5 text-right text-slate-500 font-black uppercase text-[10px]">القائد</th>
-                            <th class="px-4 py-2.5 text-right text-rose-500/70 font-black uppercase text-[10px]">كود الوصول</th>
-                            <th class="px-4 py-2.5 text-center text-slate-500 font-black uppercase text-[10px]">السعة</th>
-                            <th class="px-4 py-2.5 text-center text-emerald-500/70 font-black uppercase text-[10px]">المبلغ</th>
-                            <th class="px-4 py-2.5 text-center text-slate-500 font-black uppercase text-[10px]">حالة الدفع</th>
-                            <th class="px-4 py-2.5 text-center text-slate-500 font-black uppercase text-[10px]">الصلاحية</th>
+                            <th class="px-4 py-2.5 text-right text-slate-500 font-black uppercase text-[10px]">اسم العضو</th>
                             <th class="px-4 py-2.5 text-center text-slate-500 font-black uppercase text-[10px]">إجراءات</th>
                         </tr>
                     </thead>
-                    <tbody id="subTableBody" class="text-white divide-y divide-white/5"></tbody>
+                    <tbody id="teamGridBody" class="text-white divide-y divide-white/5"></tbody>
                 </table>
-                </div>
             </div>
-
         </div>
-    </div>
+
+            </div>
+        </div>
 </div>
 
 
-<div id="winReports" class="app-window p-10 bg-black/40 italic text-right">
-    <div class="max-w-4xl w-full mx-auto h-full flex flex-col gap-10 text-right">
+<div id="winReports" class="app-window bg-[#080b12] text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
 
-        <!-- Header -->
-        <div class="flex justify-between items-center bg-emerald-600/10 p-10 rounded-[4.5rem] border border-emerald-600/20 shadow-3xl text-right">
-            <div class="flex items-center gap-6">
-                <h3 class="text-5xl font-black italic uppercase text-indigo-500">سجل البلاغات</h3>
-                <button onclick="window.clearAllReports()"
-    class="bg-rose-600/20 hover:bg-rose-600 text-rose-500 hover:text-white px-6 py-3 rounded-2xl transition-all border border-rose-600/30 font-black italic text-sm">
-    🗑️ تصفير الرادار
-</button>
-<button onclick="window.exportReportsPDF()"
-    class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white px-6 py-3 rounded-2xl transition-all border border-indigo-600/30 font-black italic text-sm">
-    📄 تصدير PDF
-</button>
-
-
+        <!-- شريط العنوان -->
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(99,102,241,0.1),transparent); border-bottom:1px solid rgba(99,102,241,0.12);">
+            <div class="flex items-center gap-2">
+                <button onclick="window.goHome()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+                <button onclick="window.loadReports()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400 border border-white/10 hover:bg-white/5 transition-all">🔄 تحديث</button>
+                <button onclick="window.exportReportsPDF()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/10 transition-all">📄 PDF</button>
+                <button onclick="window.clearAllReports()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-rose-400 border border-rose-500/30 hover:bg-rose-500/10 transition-all">🗑️ تصفير</button>
             </div>
-            <button onclick="window.goHome()" class="text-4xl hover:scale-110 transition-transform text-white/50">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">سجل البلاغات الميدانية</p>
+                    <p class="text-indigo-400/50 text-[10px] font-mono uppercase tracking-widest">Field Reports Log</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.25);">📻</div>
+            </div>
         </div>
 
         <!-- إحصاءات سريعة -->
-        <div class="grid grid-cols-3 gap-6">
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-rose-500 text-center">
-                <div id="rep_countHigh" class="text-4xl font-black text-rose-400">0</div>
-                <div class="text-xs text-slate-400 font-black uppercase mt-1">عاجل</div>
+        <div class="grid grid-cols-3 gap-4 px-6 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
+                <div id="rep_countHigh" class="text-2xl font-black text-rose-400">0</div>
+                <div class="text-[10px] text-slate-500 font-black uppercase mt-1">⚠️ عاجل</div>
             </div>
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-emerald-500 text-center">
-                <div id="rep_countNormal" class="text-4xl font-black text-emerald-400">0</div>
-                <div class="text-xs text-slate-400 font-black uppercase mt-1">عادي</div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                <div id="rep_countNormal" class="text-2xl font-black text-emerald-400">0</div>
+                <div class="text-[10px] text-slate-500 font-black uppercase mt-1">✅ عادي</div>
             </div>
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-blue-500 text-center">
-                <div id="rep_countAll" class="text-4xl font-black text-blue-400">0</div>
-                <div class="text-xs text-slate-400 font-black uppercase mt-1">الكل</div>
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
+                <div id="rep_countAll" class="text-2xl font-black text-blue-400">0</div>
+                <div class="text-[10px] text-slate-500 font-black uppercase mt-1">📋 الكل</div>
             </div>
         </div>
 
-        <!-- فلتر بحث وأولوية -->
-        <div class="flex gap-4">
-            <input id="repSearchInput" type="text" oninput="window.filterReports()"
-                placeholder="ابحث باسم المادة أو العضو..."
-                class="flex-1 bg-black/60 border border-white/10 rounded-2xl px-6 py-4
-                       text-white font-bold italic outline-none focus:border-indigo-500
-                       transition-all text-right">
+        <!-- فلتر بحث -->
+        <div class="flex gap-3 px-6 py-3 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.05);">
             <select id="repPriorityFilter" onchange="window.filterReports()"
-                class="bg-black/60 border border-white/10 rounded-2xl px-4 py-4
-                       text-white font-black text-sm outline-none focus:border-indigo-500 transition-all">
+                class="rounded-2xl px-4 py-2.5 text-white font-black text-xs outline-none transition-all"
+                style="background:#0d1117; border:1px solid rgba(255,255,255,0.1);">
                 <option value="all">الكل</option>
                 <option value="high">⚠️ عاجل</option>
                 <option value="normal">✅ عادي</option>
             </select>
+            <input id="repSearchInput" type="text" oninput="window.filterReports()"
+                placeholder="ابحث باسم المادة أو العضو..."
+                class="flex-1 rounded-2xl px-4 py-2.5 text-white font-bold text-sm outline-none transition-all text-right"
+                style="background:#0d1117; border:1px solid rgba(255,255,255,0.1);">
         </div>
 
         <!-- قائمة البلاغات -->
-        <div id="reportFeedCont" class="flex-1 overflow-y-auto space-y-6 text-right italic p-4"></div>
-
+        <div id="reportFeedCont" class="flex-1 overflow-y-auto p-6 space-y-3 text-right custom-scrollbar"></div>
     </div>
 </div>
 
@@ -7737,40 +8393,41 @@ body.desktop-active {
 
 
 
-
-
-    <div id="winMap" class="app-window p-10 bg-black/95 italic text-right">
-        <div class="max-w-7xl w-full mx-auto h-full flex flex-col gap-10 text-right">
-            <div class="flex justify-between items-center bg-cyan-600/10 p-10 rounded-[4rem] border border-cyan-600/20 shadow-3xl text-cyan-500 text-right">
-                <h3 class="text-5xl font-black italic uppercase text-indigo-500">رادار GPS</h3>
-                <button onclick="window.goHome()" class="text-4xl hover:scale-110 transition-transform">✕</button>
-            </div>
-            <div id="mapArea" class="flex-1 rounded-[6.5rem] shadow-3xl border-[10px] border-white/5 overflow-hidden text-right">
+<div id="winMap" class="app-window bg-[#080b12] text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(6,182,212,0.1),transparent); border-bottom:1px solid rgba(6,182,212,0.12);">
+            <button onclick="window.goHome()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">رادار GPS الميداني</p>
+                    <p class="text-cyan-400/50 text-[10px] font-mono uppercase tracking-widest">Field GPS Radar</p>
                 </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">📍</div>
+            </div>
         </div>
+        <div id="mapArea" class="flex-1 overflow-hidden"></div>
     </div>
+</div>
 
-<div id="winCloud" class="app-window p-6 md:p-10 bg-black/98 italic text-right overflow-hidden">
-    <div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(#6366f1 1px, transparent 1px); background-size: 20px 20px;"></div>
 
-    <div class="max-w-5xl w-full mx-auto h-full flex flex-col gap-8 relative z-10">
-        
-        <div class="flex justify-between items-center bg-indigo-950/40 p-8 rounded-[2.5rem] border border-indigo-500/20 shadow-[0_0_30px_rgba(79,70,229,0.1)] backdrop-blur-3xl">
-            <div class="flex items-center gap-6">
-                <div class="relative">
-                    <div class="absolute inset-0 bg-indigo-500 blur-xl opacity-20 animate-pulse"></div>
-                    <div class="relative w-16 h-16 bg-indigo-600/20 border border-indigo-500/40 rounded-2xl flex items-center justify-center text-4xl shadow-inner">
-                        📂
-                    </div>
+
+<div id="winCloud" class="app-window bg-[#080b12] text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(99,102,241,0.1),transparent); border-bottom:1px solid rgba(99,102,241,0.12);">
+            <button onclick="window.goHome()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">الأرشيف المركزي</p>
+                    <p class="text-indigo-400/50 text-[10px] font-mono uppercase tracking-widest">Cloud Storage Protocol</p>
                 </div>
-                <div class="text-right">
-                    <h3 class="text-3xl md:text-5xl font-black text-white italic leading-none">الأرشيف <span class="text-indigo-500">المركزي</span></h3>
-                    <div class="flex items-center gap-2 mt-2">
-                        <span class="w-2 h-2 bg-indigo-400 rounded-full animate-ping"></span>
-                        <span class="text-[10px] text-indigo-400 font-mono tracking-[0.3em] uppercase opacity-70">Cloud Storage Protocol v2.1</span>
-                    </div>
-                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.25);">📂</div>
             </div>
+        </div>
+        <div id="archiveLog" class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar"></div>
+    </div>
+</div>
+
+
 
             <button onclick="window.goHome()" class="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-full border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all duration-500 text-2xl flex items-center justify-center group">
                 <span class="group-hover:rotate-90 transition-transform">✕</span>
@@ -7787,45 +8444,76 @@ body.desktop-active {
 
 <!-- نافذة تغيير الشفرة -->
 <div id="changeKeyModal" style="position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.92);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:1.5rem;">
-    <div class="glass max-w-sm w-full p-10 rounded-[3rem] border-t-8 border-purple-500 text-center space-y-6 shadow-2xl">
-        <div class="w-20 h-20 bg-purple-600/20 border-2 border-purple-500/50 rounded-full flex items-center justify-center mx-auto text-5xl">
-            🔑
+    <div class="w-full text-center" style="max-width:400px; background:linear-gradient(145deg,#0e0b1a,#0a0814); border:1px solid rgba(139,92,246,0.2); border-top:3px solid #7c3aed; border-radius:2rem; overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 40px rgba(139,92,246,0.06);">
+
+        <!-- شريط علوي -->
+        <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(90deg,rgba(139,92,246,0.12),transparent); border-bottom:1px solid rgba(139,92,246,0.1);">
+            <button onclick="window.closeChangeKeyModal()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-3">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">تغيير شفرة الوصول</p>
+                    <p class="text-purple-400/50 text-[10px] font-mono uppercase tracking-widest">Change Access Key</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.3);">🔑</div>
+            </div>
         </div>
-        <div>
-            <h3 class="text-xl font-black text-white italic mb-1">تغيير شفرة الوصول</h3>
-            <p class="text-xs text-purple-400/70 font-mono uppercase tracking-widest">Change Access Key</p>
-        </div>
-        <div class="bg-black/40 border border-purple-500/20 rounded-2xl p-6 space-y-4 text-right">
-            <p class="text-sm text-slate-400 font-bold text-center">أدخل شفرة الوصول الجديدة:</p>
-            <div class="relative">
-                <input id="changeKeyInput" type="text" placeholder="LDR-XXXXXX أو MEM-XXXXXX"
-                    onkeydown="if(event.key==='Enter') window.confirmChangeKey()"
-                    class="w-full bg-black/60 border border-purple-500/40 rounded-2xl p-4 text-center text-lg font-black text-purple-400 font-mono tracking-widest outline-none focus:border-purple-400 transition-all">
-                <button onclick="
-                        const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-                        let k='';
-                        for(let i=0;i<6;i++) k+=chars.charAt(Math.floor(Math.random()*chars.length));
-                        const ctx=window._changeKeyContext;
-                        const prefix=ctx?.type==='sub'?'LDR-':'MEM-';
-                        document.getElementById('changeKeyInput').value=prefix+k;"
-                    class="absolute left-3 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-300 transition-all text-lg"
-                    title="توليد شفرة عشوائية">
-                    ⚡
+
+        <!-- المحتوى -->
+        <div class="p-6 space-y-4">
+
+            <!-- البادئة + حقل الإدخال + زر توليد -->
+            <div>
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest text-right mb-3">أدخل الجزء الجديد من الشفرة</p>
+                <div class="flex items-center gap-2 flex-row-reverse">
+                    <!-- البادئة الثابتة -->
+                    <div id="changeKeyPrefix" class="shrink-0 h-12 px-4 flex items-center justify-center rounded-2xl font-black text-sm font-mono tracking-widest"
+                        style="background:rgba(139,92,246,0.2); border:1px solid rgba(139,92,246,0.4); color:#c4b5fd; min-width:72px;">
+                        LDR-
+                    </div>
+                    <!-- حقل الإدخال -->
+                    <input id="changeKeySuffix" type="text" maxlength="10"
+                        placeholder="XXXXXX"
+                        oninput="window._updateFullKey()"
+                        onkeydown="if(event.key==='Enter') window.confirmChangeKey()"
+                        class="flex-1 h-12 border border-purple-500/30 rounded-2xl text-center text-base font-black text-purple-300 font-mono tracking-widest outline-none focus:border-purple-400 transition-all uppercase"
+                        style="background:rgba(0,0,0,0.5);">
+                    <!-- زر توليد عشوائي -->
+                    <button onclick="
+                            const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                            let k='';
+                            for(let i=0;i<6;i++) k+=chars.charAt(Math.floor(Math.random()*chars.length));
+                            document.getElementById('changeKeySuffix').value=k;
+                            window._updateFullKey();"
+                        class="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-lg transition-all"
+                        style="background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.3); color:#a78bfa;"
+                        title="توليد عشوائي">⚡</button>
+                </div>
+            </div>
+
+            <!-- معاينة الشفرة الكاملة -->
+            <div class="rounded-2xl py-4 px-6" style="background:rgba(0,0,0,0.4); border:1px solid rgba(139,92,246,0.12);">
+                <p class="text-[9px] text-slate-600 uppercase tracking-widest mb-2">الشفرة الكاملة بعد التغيير</p>
+                <p id="changeKeyPreview" class="text-purple-300 font-black font-mono tracking-[0.25em] text-xl">—</p>
+            </div>
+
+            <p class="text-[10px] text-slate-600 font-bold text-center">⚠️ سيتم تشفير الشفرة الجديدة تلقائياً</p>
+
+            <!-- حقل مخفي -->
+            <input id="changeKeyInput" type="hidden">
+
+            <!-- أزرار -->
+            <div class="flex gap-3 pt-1">
+                <button onclick="window.closeChangeKeyModal()"
+                    class="flex-1 py-3 rounded-2xl font-black text-slate-400 text-sm transition-all hover:text-white"
+                    style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">
+                    إلغاء
+                </button>
+                <button onclick="window.confirmChangeKey()"
+                    class="flex-1 py-3 rounded-2xl font-black text-white text-sm transition-all active:scale-95 border-b-4 border-purple-900"
+                    style="background:linear-gradient(135deg,#6d28d9,#7c3aed); box-shadow:0 6px 20px rgba(109,40,217,0.35);">
+                    🔒 تغيير وتشفير
                 </button>
             </div>
-            <p class="text-[10px] text-slate-500 font-bold text-center italic">
-                ⚠️ سيتم تشفير الشفرة الجديدة تلقائياً
-            </p>
-        </div>
-        <div class="flex gap-3">
-            <button onclick="window.confirmChangeKey()"
-                class="flex-1 py-4 bg-purple-600 rounded-2xl font-black text-white hover:bg-purple-500 transition-all border-b-4 border-purple-900 italic uppercase">
-                تغيير وتشفير
-            </button>
-            <button onclick="window.closeChangeKeyModal()"
-                class="flex-1 py-4 bg-white/5 rounded-2xl font-black text-white/60 hover:bg-white/10 transition-all border border-white/10 italic uppercase">
-                إلغاء
-            </button>
         </div>
     </div>
 </div>
@@ -7840,7 +8528,7 @@ body.desktop-active {
         </div>
         <div>
             <h3 class="text-xl font-black text-white italic mb-1">إجراء سيادي</h3>
-            <p class="text-xs text-cyan-400/70 font-mono uppercase tracking-widest">High Security Operation</p>
+<p id="otpModalSubtitle" class="text-xs text-blue-400/70 font-mono uppercase tracking-widest">HIGH SECURITY OPERATION</p>
         </div>
         <div class="bg-black/40 border border-cyan-500/20 rounded-2xl p-6 space-y-4">
             <p class="text-sm text-slate-400 font-bold">أدخل كود Google Authenticator المكون من 6 أرقام:</p>
@@ -7874,7 +8562,7 @@ body.desktop-active {
             <p class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-widest">الكود السري — احتفظ به بأمان</p>
             <div class="bg-black/60 border border-emerald-500/40 rounded-2xl p-5 relative group">
                 <span id="keyAlertValue" class="text-2xl font-black text-emerald-400 font-mono tracking-widest"></span>
-                <button onclick="navigator.clipboard.writeText(document.getElementById('keyAlertValue').textContent).then(()=>window.showNotif('تم نسخ الكود','success'))"
+                <button onclick="window.copyText(document.getElementById('keyAlertValue').textContent)"
                     class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-emerald-400 transition-all text-lg">
                     📋
                 </button>
@@ -7915,67 +8603,67 @@ body.desktop-active {
 
 
 <!-- ===== لوحة الإحصاء ===== -->
-<div id="winDashboard" class="app-window p-6 md:p-10 italic text-right">
-    <div class="max-w-7xl w-full mx-auto h-full flex flex-col gap-8">
-
-        <!-- Header -->
-        <div class="flex justify-between items-center bg-violet-600/10 p-8 rounded-[4rem] border border-violet-600/20">
-            <div class="flex items-center gap-5">
-                <div class="w-16 h-16 bg-violet-600/20 border border-violet-500/40 rounded-2xl flex items-center justify-center text-4xl">📊</div>
-                <div>
-                    <h3 class="text-4xl font-black italic text-violet-400 uppercase">لوحة الإحصاء</h3>
-                    <p class="text-[10px] text-violet-500/60 font-mono tracking-widest uppercase mt-1">Operational Intelligence Dashboard</p>
-                </div>
+<div id="winDashboard" class="app-window bg-[#080b12] italic text-right" style="padding:0;">
+    <div class="w-full h-full flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 shrink-0" style="background:linear-gradient(90deg,rgba(139,92,246,0.1),transparent); border-bottom:1px solid rgba(139,92,246,0.12);">
+            <div class="flex items-center gap-2">
+                <button onclick="window.goHome()" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+                <button onclick="window.refreshDashboard()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-violet-400 border border-violet-500/30 hover:bg-violet-500/10 transition-all">🔄 تحديث</button>
+                <button onclick="window.exportDashboardPDF()" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black text-rose-400 border border-rose-500/30 hover:bg-rose-500/10 transition-all">📄 PDF</button>
             </div>
             <div class="flex items-center gap-4">
-                <button onclick="window.refreshDashboard()"
-                    class="px-5 py-2.5 bg-violet-600/20 border border-violet-500/40 rounded-2xl text-violet-400 font-black text-xs uppercase hover:bg-violet-600 hover:text-white transition-all">
-                    🔄 تحديث
-                </button>
-                <button onclick="window.exportDashboardPDF()"
-                    class="px-5 py-2.5 bg-rose-600/20 border border-rose-500/40 rounded-2xl text-rose-400 font-black text-xs uppercase hover:bg-rose-600 hover:text-white transition-all">
-                    📄 تصدير PDF
-                </button>
-                <button onclick="window.goHome()"
-                    class="w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center text-2xl">✕</button>
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">لوحة الإحصاء التشغيلي</p>
+                    <p class="text-violet-400/50 text-[10px] font-mono uppercase tracking-widest">Operational Intelligence Dashboard</p>
+                </div>
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.25);">📊</div>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div class="max-w-6xl mx-auto space-y-6">
+
+
+
+
+
+<!-- بطاقات الإحصاء -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="rounded-2xl p-4 text-right" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
+                <div class="text-2xl mb-2">📻</div>
+                <div id="dash_reports" class="text-3xl font-black text-rose-400">0</div>
+                <p class="text-[10px] font-black uppercase text-slate-500 mt-1">إجمالي البلاغات</p>
+                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_reportsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#ef4444;"></div>
+                </div>
+            </div>
+            <div class="rounded-2xl p-4 text-right" style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
+                <div class="text-2xl mb-2">🗃️</div>
+                <div id="dash_materials" class="text-3xl font-black text-blue-400">0</div>
+                <p class="text-[10px] font-black uppercase text-slate-500 mt-1">المواد المسجلة</p>
+                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_materialsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#3b82f6;"></div>
+                </div>
+            </div>
+            <div class="rounded-2xl p-4 text-right" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
+                <div class="text-2xl mb-2">👥</div>
+                <div id="dash_members" class="text-3xl font-black text-emerald-400">0</div>
+                <p class="text-[10px] font-black uppercase text-slate-500 mt-1">أعضاء الفريق</p>
+                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_membersBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#10b981;"></div>
+                </div>
+            </div>
+            <div class="rounded-2xl p-4 text-right" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+                <div class="text-2xl mb-2">🎖️</div>
+                <div id="dash_subs" class="text-3xl font-black text-amber-400">0</div>
+                <p class="text-[10px] font-black uppercase text-slate-500 mt-1">القادة المفعلون</p>
+                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_subsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#f59e0b;"></div>
+                </div>
             </div>
         </div>
 
-        <!-- بطاقات الإحصاء الأربع -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-rose-500 text-right">
-                <div class="text-3xl mb-2">📻</div>
-                <div id="dash_reports" class="text-5xl font-black text-rose-400 italic">0</div>
-                <p class="text-xs font-black uppercase opacity-50 mt-2">إجمالي البلاغات</p>
-                <div class="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div id="dash_reportsBar" class="h-full bg-rose-500 rounded-full transition-all duration-1000" style="width:0%"></div>
-                </div>
-            </div>
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-blue-500 text-right">
-                <div class="text-3xl mb-2">🗃️</div>
-                <div id="dash_materials" class="text-5xl font-black text-blue-400 italic">0</div>
-                <p class="text-xs font-black uppercase opacity-50 mt-2">المواد المسجلة</p>
-                <div class="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div id="dash_materialsBar" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width:0%"></div>
-                </div>
-            </div>
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-emerald-500 text-right">
-                <div class="text-3xl mb-2">👨‍✈️</div>
-                <div id="dash_members" class="text-5xl font-black text-emerald-400 italic">0</div>
-                <p class="text-xs font-black uppercase opacity-50 mt-2">أعضاء الفريق</p>
-                <div class="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div id="dash_membersBar" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width:0%"></div>
-                </div>
-            </div>
-            <div class="glass p-6 rounded-[2.5rem] border-t-4 border-amber-500 text-right">
-                <div class="text-3xl mb-2">🪪</div>
-                <div id="dash_subs" class="text-5xl font-black text-amber-400 italic">0</div>
-                <p class="text-xs font-black uppercase opacity-50 mt-2">القادة المفعلون</p>
-                <div class="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div id="dash_subsBar" class="h-full bg-amber-500 rounded-full transition-all duration-1000" style="width:0%"></div>
-                </div>
-            </div>
-        </div>
+
+
 
         <!-- مخطط + آخر البلاغات -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -8064,18 +8752,15 @@ body.desktop-active {
                 <span class="text-xs text-slate-400 font-bold">عادي</span>
             </div>
         </div>
-    </div>
-    <div class="glass p-8 rounded-[3rem] border-t-4 border-violet-500">
-        <h4 class="text-violet-400 font-black text-lg mb-6 italic uppercase">📈 نشاط آخر 7 أيام</h4>
+</div>
+    <div class="rounded-2xl p-6" style="background:rgba(139,92,246,0.06); border:1px solid rgba(139,92,246,0.18);">
+        <h4 class="text-violet-400 font-black text-sm mb-4 uppercase">📈 نشاط آخر 7 أيام</h4>
         <canvas id="chartBar" width="400" height="220"></canvas>
     </div>
-</div>
-
-
-
+        </div>
+        </div>
     </div>
 </div>
-
 
 <!-- مؤشر تحميل البيانات -->
 <div id="syncLoader" class="hidden fixed bottom-24 left-1/2 -translate-x-1/2 z-[400000]
@@ -8150,7 +8835,7 @@ body.desktop-active {
                         <span class="text-white font-black text-sm">CliQ / محافظ</span>
                     </div>
                     <div class="flex items-center justify-between rounded-xl px-4 py-3" style="background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3);">
-                        <button onclick="navigator.clipboard.writeText('IBRAWISH94'); window.showNotif('تم النسخ ✅','success')"
+                        <button onclick="window.copyText('IBRAWISH94')"
                             class="text-indigo-400/60 hover:text-indigo-300 text-sm transition-all">📋</button>
                         <span class="text-indigo-200 font-mono font-black tracking-[0.2em]">IBRAWISH94</span>
                     </div>
@@ -8343,28 +9028,105 @@ body.desktop-active {
 </div>
 
 
-<!-- نافذة المحادثة الداخلية -->
-<div id="winChat" class="hidden fixed inset-0 z-[500000] bg-black/95 flex-col" style="backdrop-filter:blur(20px)">
-    <div class="flex items-center justify-between p-6 border-b border-white/10 bg-slate-900/80">
-        <button onclick="window.closeChat()" class="w-10 h-10 bg-white/5 hover:bg-rose-500/20 rounded-xl flex items-center justify-center text-white/50 hover:text-rose-500 transition-all">✕</button>
-        <div class="text-right">
-            <h3 class="text-white font-black text-lg italic">💬 القناة الداخلية المشفرة</h3>
-            <p class="text-slate-500 text-xs font-bold">تواصل مباشر — القائد والفريق</p>
+
+
+
+
+<!-- ===== نافذة البلاغ الطارئ ===== -->
+<div id="winEmergencyReport" class="hidden fixed inset-0 z-[400000] flex items-center justify-center p-4" style="background:rgba(0,0,0,0.92); backdrop-filter:blur(12px);">
+    <div class="w-full text-right" style="max-width:480px; background:linear-gradient(145deg,#1a0505,#120808); border:1px solid rgba(220,38,38,0.3); border-top:3px solid #dc2626; border-radius:2rem; overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 40px rgba(220,38,38,0.1);">
+        <!-- شريط علوي -->
+        <div class="flex items-center justify-between px-6 py-4" style="background:rgba(220,38,38,0.1); border-bottom:1px solid rgba(220,38,38,0.15);">
+            <button onclick="document.getElementById('winEmergencyReport').classList.add('hidden'); document.getElementById('winEmergencyReport').classList.remove('flex');"
+                class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition-all text-sm flex items-center justify-center border border-white/10">✕</button>
+            <div class="flex items-center gap-3">
+                <div>
+                    <p class="text-white font-black text-sm uppercase tracking-wider">🚨 بلاغ طوارئ ميداني</p>
+                    <p class="text-rose-400/50 text-[10px] font-mono uppercase">EMERGENCY FIELD REPORT</p>
+                </div>
+            </div>
         </div>
-        <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-    </div>
-    <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-1"></div>
-    <div class="p-4 border-t border-white/10 bg-slate-900/80 flex gap-3">
-        <button onclick="window.sendChatMessage()"
-            class="w-12 h-12 bg-blue-600 hover:bg-blue-500 rounded-xl flex items-center justify-center text-white font-black transition-all flex-shrink-0">
-            ➤
-        </button>
-        <input id="chatInput" type="text" placeholder="اكتب رسالتك..."
-            onkeydown="if(event.key==='Enter') window.sendChatMessage()"
-            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-white text-sm font-bold outline-none focus:border-blue-500 text-right" dir="rtl">
+        <!-- المحتوى -->
+        <div class="p-6 space-y-4">
+            <div class="rounded-2xl p-3 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
+                <p class="text-rose-400 text-xs font-black">⚠️ سيتم إرسال موقعك الجغرافي والمادة الخطرة للقائد فوراً</p>
+            </div>
+            <input id="emergencyMaterial" type="text" placeholder="اسم المادة الخطرة..."
+                class="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-right text-white text-sm outline-none focus:border-rose-500 transition-all">
+            <input id="emergencyUN" type="text" placeholder="رقم UN (اختياري)..."
+                class="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-right text-white text-sm outline-none focus:border-rose-500 transition-all">
+            <select id="emergencyLevel" class="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-right text-white text-sm outline-none focus:border-rose-500 transition-all">
+                <option value="منخفض">🟡 منخفض</option>
+                <option value="متوسط" selected>🟠 متوسط</option>
+                <option value="عالي">🔴 عالي</option>
+                <option value="حرج">⚫ حرج — خطر فوري</option>
+            </select>
+            <textarea id="emergencyNotes" placeholder="ملاحظات إضافية..." rows="3"
+                class="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-right text-white text-sm outline-none focus:border-rose-500 transition-all resize-none"></textarea>
+            <button onclick="window.sendEmergencyReport()"
+                class="w-full py-4 rounded-2xl font-black text-white text-sm transition-all active:scale-95 border-b-4 border-red-900 animate-pulse"
+                style="background:linear-gradient(135deg,#b91c1c,#dc2626); box-shadow:0 6px 25px rgba(220,38,38,0.4);">
+                🚨 إرسال البلاغ الطارئ الآن
+            </button>
+        </div>
     </div>
 </div>
 
+
+<!-- نافذة المحادثة الداخلية -->
+<div id="winChat" class="hidden fixed inset-0 z-[500000] bg-black/95 flex-col" style="backdrop-filter:blur(20px)">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0" style="background:rgba(255,255,255,0.02);">
+        <button onclick="window.closeChat()" class="text-white/40 hover:text-white transition-all text-xl">✕</button>
+        <div class="text-center">
+            <p id="chatRoomTitle" class="text-white font-black text-sm">💬 القناة الداخلية</p>
+            <p class="text-[10px] text-slate-600 font-black uppercase tracking-widest">ERG SYSTEM</p>
+        </div>
+        <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+    </div>
+    <!-- شريط اختيار المستلم للمدير -->
+    <div id="masterChatControls" class="hidden px-4 py-2 border-b border-white/5 shrink-0" style="background:rgba(255,255,255,0.02);">
+        <div class="flex gap-2 items-center">
+            <select id="chatTargetSelect" onchange="window.switchChatRoom()"
+                class="flex-1 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-blue-500 text-right"
+                style="background:#1a1a2e;">
+                <option value="MASTER_BROADCAST">📢 جميع القادة (بث عام)</option>
+            </select>
+            <button onclick="window.sendMaintenanceAlert()"
+                class="px-3 py-1.5 rounded-lg text-[10px] font-black text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 transition-all whitespace-nowrap"
+                style="background:rgba(245,158,11,0.05);">
+                🔧 تنبيه صيانة
+            </button>
+        </div>
+    </div>
+
+    <!-- تبويبات القناة للقائد فقط -->
+    <div id="leaderChatTabs" class="hidden px-4 py-2 gap-2 shrink-0" style="background:rgba(0,0,0,0.3); border-bottom:1px solid rgba(255,255,255,0.06);">
+        <button id="leaderChatTabBroadcast" onclick="window.openLeaderChat('broadcast')"
+            class="flex-1 py-2 rounded-xl text-xs font-black transition-all"
+            style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.3);">
+            📢 رسائل المدير
+        </button>
+        <button id="leaderChatTabTeam" onclick="window.openLeaderChat('team')"
+            class="flex-1 py-2 rounded-xl text-xs font-black transition-all"
+            style="background:transparent; color:#6b7280; border:1px solid rgba(255,255,255,0.08);">
+            👥 فريقي
+        </button>
+    </div>
+    <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-1 custom-scrollbar"></div>
+    <div class="px-4 pb-4 pt-2 shrink-0 border-t border-white/5 flex gap-3 items-center">
+        <button onclick="window.sendChatMessage()"
+            class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all hover:scale-105"
+            style="background:rgba(37,99,235,0.3);border:1px solid rgba(37,99,235,0.4);">
+            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+            </svg>
+        </button>
+        <input id="chatInput" type="text" placeholder="اكتب رسالة..."
+            dir="rtl"
+            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-blue-500/50 placeholder-slate-600 font-bold transition-all"
+            onkeydown="if(event.key==='Enter') window.sendChatMessage()">
+    </div>
+</div>
 
 
 
