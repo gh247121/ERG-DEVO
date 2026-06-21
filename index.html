@@ -3985,7 +3985,43 @@ setupInactivityTimer();
 
 
 // --- المحرك النهائي لربط النظام وبدء التشغيل ---
-        window.onload = async () => { 
+        window.onload = async () => {
+
+// ===== فحص رابط QR العام =====
+const _urlParams = new URLSearchParams(location.search);
+const _unParam = _urlParams.get('un');
+if (_unParam) {
+    // أخفِ Splash وأظهر صفحة المادة العامة
+    setTimeout(() => {
+        const splash = document.getElementById('splashScreen');
+        if (splash) { splash.style.opacity = '0'; setTimeout(() => splash.remove(), 500); }
+    }, 800);
+    // حاول جلب بيانات المادة من الكاش أو Firebase
+    setTimeout(async () => {
+        let mat = null;
+        // أولاً من الكاش
+        try {
+            const cached = localStorage.getItem('erg_cache_materials');
+            if (cached) {
+                const arr = JSON.parse(cached);
+                mat = arr.find(m => (m.un||m.UN||'').toString() === _unParam);
+            }
+        } catch(e) {}
+        // إذا لم يوجد في الكاش، جلب من Firebase
+        if (!mat) {
+            try {
+                await signInAnonymously(auth);
+                const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'materials'));
+                const arr = snap.docs.map(d => d.data());
+                mat = arr.find(m => (m.un||m.UN||'').toString() === _unParam);
+            } catch(e) {}
+        }
+        window.showPublicHazmatCard(mat, _unParam);
+    }, 1000);
+    return; // لا تكمل تحميل التطبيق الكامل
+}
+// ===== نهاية فحص QR =====
+
 // إخفاء شاشة Splash بعد التحميل
 setTimeout(() => {
     const splash = document.getElementById('splashScreen');
@@ -4715,6 +4751,100 @@ window.filterSubs = () => {
     if (st) st.textContent = total;
 };
 
+
+
+
+
+// ===== صفحة المادة العامة (بدون تسجيل دخول) =====
+window.showPublicHazmatCard = (mat, un) => {
+    const body = document.body;
+    body.innerHTML = '';
+    body.style.cssText = 'margin:0;padding:0;background:#060a14;font-family:Arial,sans-serif;min-height:100vh;direction:rtl;';
+
+    const name = mat ? (mat.name || mat.NAME || mat.arabic_name || `مادة UN ${un}`) : `مادة UN ${un}`;
+    const hazClass = mat ? (mat.hazard_class || mat.HAZARD_CLASS || mat.class || '—') : '—';
+    const guide = mat ? (mat.guide || mat.GUIDE || mat.guide_num || '—') : '—';
+    const labels = mat ? (mat.labels || mat.LABELS || '—') : '—';
+    const fireRisk = mat ? (mat.fire || mat.FIRE || mat.fire_hazard || '—') : '—';
+    const healthRisk = mat ? (mat.health || mat.HEALTH || mat.health_hazard || '—') : '—';
+    const reactRisk = mat ? (mat.reactivity || mat.REACTIVITY || '—') : '—';
+    const isolation = mat ? (mat.isolation || mat.ISOLATION || mat.isolation_dist || '—') : '—';
+    const ppe = mat ? (mat.ppe || mat.PPE || mat.protective_equipment || '—') : '—';
+    const firstAid = mat ? (mat.first_aid || mat.FIRST_AID || '—') : '—';
+    const spill = mat ? (mat.spill || mat.SPILL || mat.spill_response || '—') : '—';
+    const fire = mat ? (mat.fire_response || mat.FIRE_RESPONSE || '—') : '—';
+
+    body.innerHTML = `
+    <div style="max-width:600px;margin:0 auto;padding:1rem;">
+
+        <!-- الرأس -->
+        <div style="background:linear-gradient(135deg,#1a0505,#120808);border:1px solid rgba(220,38,38,0.3);border-top:4px solid #dc2626;border-radius:1.5rem;padding:1.5rem;margin-bottom:1rem;text-align:center;">
+            <p style="color:rgba(220,38,38,0.6);font-size:0.625rem;font-family:monospace;text-transform:uppercase;letter-spacing:0.2em;margin-bottom:0.5rem;">⚡ ERG SYSTEM — HAZMAT PUBLIC CARD</p>
+            <h1 style="color:white;font-size:1.75rem;font-weight:900;margin:0.25rem 0;">${name}</h1>
+            <div style="display:flex;justify-content:center;gap:0.75rem;margin-top:0.75rem;flex-wrap:wrap;">
+                <span style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.4);color:#f87171;padding:0.375rem 1rem;border-radius:2rem;font-weight:900;font-size:1.5rem;font-family:monospace;">UN ${un}</span>
+                <span style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;padding:0.375rem 0.75rem;border-radius:2rem;font-weight:900;font-size:0.75rem;">CLASS ${hazClass}</span>
+                <span style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.4);color:#60a5fa;padding:0.375rem 0.75rem;border-radius:2rem;font-weight:900;font-size:0.75rem;">GUIDE ${guide}</span>
+            </div>
+        </div>
+
+        <!-- بطاقات المعلومات -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:1rem;padding:1rem;">
+                <p style="color:rgba(220,38,38,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🔥 خطر الحريق</p>
+                <p style="color:white;font-size:0.875rem;font-weight:700;">${fireRisk}</p>
+            </div>
+            <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;">
+                <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">☣️ خطر صحي</p>
+                <p style="color:white;font-size:0.875rem;font-weight:700;">${healthRisk}</p>
+            </div>
+            <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:1rem;padding:1rem;">
+                <p style="color:rgba(139,92,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">⚗️ التفاعل</p>
+                <p style="color:white;font-size:0.875rem;font-weight:700;">${reactRisk}</p>
+            </div>
+            <div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:1rem;padding:1rem;">
+                <p style="color:rgba(6,182,212,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">📏 مسافة العزل</p>
+                <p style="color:white;font-size:0.875rem;font-weight:700;">${isolation}</p>
+            </div>
+        </div>
+
+        <!-- معدات الوقاية -->
+        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(16,185,129,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🦺 معدات الوقاية الشخصية</p>
+            <p style="color:white;font-size:0.875rem;font-weight:700;">${ppe}</p>
+        </div>
+
+        <!-- الإسعافات الأولية -->
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(59,130,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🏥 الإسعافات الأولية</p>
+            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${firstAid}</p>
+        </div>
+
+        <!-- الاستجابة للتسرب -->
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🧹 الاستجابة للتسرب</p>
+            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${spill}</p>
+        </div>
+
+        <!-- الاستجابة للحريق -->
+        <div style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:1rem;padding:1rem;margin-bottom:1rem;">
+            <p style="color:rgba(220,38,38,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🚒 الاستجابة للحريق</p>
+            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${fire}</p>
+        </div>
+
+        <!-- تنبيه + ملصقات -->
+        ${labels !== '—' ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;margin-bottom:1rem;text-align:center;">
+            <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🏷️ الملصقات المطلوبة</p>
+            <p style="color:#fbbf24;font-size:0.875rem;font-weight:900;">${labels}</p>
+        </div>` : ''}
+
+        <!-- تذييل -->
+        <div style="text-align:center;padding:1rem;">
+            <p style="color:rgba(255,255,255,0.15);font-size:0.625rem;font-family:monospace;">ERG SYSTEM — الدفاع المدني الأردني — المنطقة الصناعية الجنوبية</p>
+            <p style="color:rgba(220,38,38,0.3);font-size:0.625rem;margin-top:0.25rem;">⚠️ هذه المعلومات للاستخدام الميداني فقط</p>
+        </div>
+    </div>`;
+};
 
 
 
