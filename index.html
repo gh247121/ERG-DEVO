@@ -3991,6 +3991,11 @@ setupInactivityTimer();
 const _urlParams = new URLSearchParams(location.search);
 const _unParam = _urlParams.get('un');
 if (_unParam) {
+    // أخفِ كل شيء فوراً
+    document.body.style.overflow = 'hidden';
+    const _hideAll = document.createElement('style');
+    _hideAll.textContent = '#splashScreen ~ *, .app-window, #entryOptions, #loginFields, #subFields, #trialFields { display:none !important; } #splashScreen { opacity:0 !important; }';
+    document.head.appendChild(_hideAll);
     // أخفِ Splash وأظهر صفحة المادة العامة
     setTimeout(() => {
         const splash = document.getElementById('splashScreen');
