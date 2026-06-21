@@ -2752,7 +2752,58 @@ const mode = window.searchMode || 'un';
     }
 };
 
+// ===== أدوات التحكم بالخريطة =====
+window.mapLocateMe = () => {
+    if (!window.map) return;
+    navigator.geolocation.getCurrentPosition(pos => {
+        window.map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+        L.marker([pos.coords.latitude, pos.coords.longitude])
+            .addTo(window.map)
+            .bindPopup('📍 موقعك الحالي').openPopup();
+    }, () => window.showNotif("تعذّر تحديد موقعك", "error"));
+};
 
+window.mapShowAll = () => {
+    if (!window.map || !window._mapMarkers?.length) return;
+    const group = L.featureGroup(window._mapMarkers);
+    window.map.fitBounds(group.getBounds().pad(0.2));
+};
+
+window.mapShowReports = async () => {
+    if (!window.map) return;
+    try {
+        const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'emergency_reports'));
+        snap.forEach(doc => {
+            const d = doc.data();
+            if (d.location?.lat) {
+                L.marker([d.location.lat, d.location.lng], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: '<div style="background:#dc2626;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.5);">🚨</div>',
+                        iconSize: [32, 32]
+                    })
+                }).addTo(window.map)
+                  .bindPopup(`<b>${d.memberName}</b><br>${d.material}<br>${new Date(d.timestamp).toLocaleString('ar-SA')}`);
+            }
+        });
+        window.showNotif("✅ تم تحميل مواقع البلاغات", "success");
+    } catch(e) { window.showNotif("فشل تحميل البلاغات", "error"); }
+};
+
+window._mapSatellite = false;
+window.toggleMapLayer = () => {
+    if (!window.map || !window._darkLayer || !window._satLayer) return;
+    window._mapSatellite = !window._mapSatellite;
+    if (window._mapSatellite) {
+        window.map.removeLayer(window._darkLayer);
+        window._satLayer.addTo(window.map);
+        window.showNotif("🛰️ وضع القمر الصناعي", "success");
+    } else {
+        window.map.removeLayer(window._satLayer);
+        window._darkLayer.addTo(window.map);
+        window.showNotif("🗺️ الخريطة الداكنة", "success");
+    }
+};
 
 
 window.initMap = () => { 
@@ -2761,12 +2812,14 @@ window.initMap = () => {
     if(!el) return; 
 
     // الطبقة الأساسية (Dark Mode)
-    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+    window._darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+    const darkLayer = window._darkLayer;
     
     // طبقة الأقمار الصناعية المتطورة
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+window._satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Esri World Imagery'
     });
+    const satelliteLayer = window._satLayer;
 
     map = L.map('mapArea', {
         center: [24.7136, 46.6753],
@@ -5127,7 +5180,27 @@ window.rejectRequest = async (reqId) => {
 
 
 // ===== محرك لوحة الإحصاء =====
-window.refreshDashboard = () => {
+window.refreshDashboard = async () => {
+    // جلب البيانات من Firebase إذا لم تكن محملة
+    if (!window.allReports?.length) {
+        try {
+            const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'reports'));
+            window.allReports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch(e) {}
+    }
+    if (!window.subscribers?.length) {
+        try {
+            const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'subscribers'));
+            window.subscribers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch(e) {}
+    }
+    if (!window.teamMembers?.length) {
+        try {
+            const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'team_keys'));
+            window.teamMembers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch(e) {}
+    }
+
     const reports  = window.allReports  || [];
     const members  = window.teamMembers || [];
     const subs     = window.subscribers || [];
@@ -6962,6 +7035,16 @@ input:focus, select:focus, textarea:focus {
                                     <button onclick="window.viewGuide()" class="px-8 py-5 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl border-b-4 border-blue-900 active:translate-y-1 transition-all">
                                         📖 إجراءات الدليل (GUIDE <span id="resGuideNum">--</span>)
                                     </button>
+                                    <button onclick="window.generateMaterialQR(document.getElementById('resU').textContent, document.getElementById('resN').textContent)"
+                                        class="px-6 py-5 rounded-2xl font-black text-sm shadow-xl border-b-4 active:translate-y-1 transition-all"
+                                        style="background:rgba(139,92,246,0.8); border-bottom-color:#4c1d95; color:white;">
+                                        📱 QR Code
+                                    </button>
+                                    <button onclick="window.exportFullIncidentPDF()"
+                                        class="px-6 py-5 rounded-2xl font-black text-sm shadow-xl border-b-4 active:translate-y-1 transition-all"
+                                        style="background:rgba(220,38,38,0.8); border-bottom-color:#7f1d1d; color:white;">
+                                        📄 تقرير PDF
+                                    </button>
 
 
 
@@ -8576,6 +8659,15 @@ input:focus, select:focus, textarea:focus {
                 <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.25);">📍</div>
             </div>
         </div>
+        <!-- أدوات التحكم -->
+        <div class="flex items-center gap-2 px-4 py-3 shrink-0" style="border-bottom:1px solid rgba(6,182,212,0.1);">
+            <button onclick="window.mapLocateMe()" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/10 transition-all" style="background:rgba(6,182,212,0.06);">📍 موقعي</button>
+            <button onclick="window.mapShowAll()" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all" style="background:rgba(16,185,129,0.06);">👥 الفريق</button>
+            <button onclick="window.mapShowReports()" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black text-rose-400 border border-rose-500/30 hover:bg-rose-500/10 transition-all" style="background:rgba(220,38,38,0.06);">🚨 البلاغات</button>
+            <button onclick="window.toggleMapLayer()" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black text-violet-400 border border-violet-500/30 hover:bg-violet-500/10 transition-all" style="background:rgba(139,92,246,0.06);">🛰️ قمر صناعي</button>
+            <div class="flex-1"></div>
+            <span id="mapMembersCount" class="text-[10px] text-slate-500 font-black">0 عضو على الخريطة</span>
+        </div>
         <div id="mapArea" class="flex-1 overflow-hidden"></div>
     </div>
 </div>
@@ -8800,35 +8892,47 @@ input:focus, select:focus, textarea:focus {
 <!-- بطاقات الإحصاء -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="rounded-2xl p-4 text-right" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2);">
-                <div class="text-2xl mb-2">📻</div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl">📻</span>
+                    <span class="text-[9px] font-black text-rose-400/60 uppercase px-2 py-0.5 rounded-full" style="background:rgba(220,38,38,0.1);">بلاغات</span>
+                </div>
                 <div id="dash_reports" class="text-3xl font-black text-rose-400">0</div>
                 <p class="text-[10px] font-black uppercase text-slate-500 mt-1">إجمالي البلاغات</p>
-                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
-                    <div id="dash_reportsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#ef4444;"></div>
+                <div class="mt-3 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_reportsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:linear-gradient(90deg,#dc2626,#ef4444);"></div>
                 </div>
             </div>
             <div class="rounded-2xl p-4 text-right" style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
-                <div class="text-2xl mb-2">🗃️</div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl">🗃️</span>
+                    <span class="text-[9px] font-black text-blue-400/60 uppercase px-2 py-0.5 rounded-full" style="background:rgba(59,130,246,0.1);">مواد</span>
+                </div>
                 <div id="dash_materials" class="text-3xl font-black text-blue-400">0</div>
                 <p class="text-[10px] font-black uppercase text-slate-500 mt-1">المواد المسجلة</p>
-                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
-                    <div id="dash_materialsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#3b82f6;"></div>
+                <div class="mt-3 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_materialsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:linear-gradient(90deg,#1d4ed8,#3b82f6);"></div>
                 </div>
             </div>
             <div class="rounded-2xl p-4 text-right" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
-                <div class="text-2xl mb-2">👥</div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl">👥</span>
+                    <span class="text-[9px] font-black text-emerald-400/60 uppercase px-2 py-0.5 rounded-full" style="background:rgba(16,185,129,0.1);">أعضاء</span>
+                </div>
                 <div id="dash_members" class="text-3xl font-black text-emerald-400">0</div>
                 <p class="text-[10px] font-black uppercase text-slate-500 mt-1">أعضاء الفريق</p>
-                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
-                    <div id="dash_membersBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#10b981;"></div>
+                <div class="mt-3 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_membersBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:linear-gradient(90deg,#059669,#10b981);"></div>
                 </div>
             </div>
             <div class="rounded-2xl p-4 text-right" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
-                <div class="text-2xl mb-2">🎖️</div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl">🎖️</span>
+                    <span class="text-[9px] font-black text-amber-400/60 uppercase px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,0.1);">قادة</span>
+                </div>
                 <div id="dash_subs" class="text-3xl font-black text-amber-400">0</div>
                 <p class="text-[10px] font-black uppercase text-slate-500 mt-1">القادة المفعلون</p>
-                <div class="mt-2 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
-                    <div id="dash_subsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:#f59e0b;"></div>
+                <div class="mt-3 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06);">
+                    <div id="dash_subsBar" class="h-full rounded-full transition-all duration-1000" style="width:0%; background:linear-gradient(90deg,#d97706,#f59e0b);"></div>
                 </div>
             </div>
         </div>
