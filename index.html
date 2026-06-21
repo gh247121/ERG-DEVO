@@ -3696,7 +3696,7 @@ window.exportFullIncidentPDF = async () => {
         <div style="border-bottom:3px solid #dc2626; padding-bottom:20px; margin-bottom:30px; display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h1 style="font-size:22px; font-weight:900; color:#dc2626; margin:0;">🚨 تقرير حادث ميداني</h1>
-                <p style="font-size:12px; color:#666; margin:4px 0;">الدفاع المدني — المنطقة الصناعية الجنوبية — العقبة</p>
+                <p style="font-size:12px; color:#666; margin:4px 0;">الدفاع المدني</p>
                 <p style="font-size:11px; color:#999;">رقم التقرير: ${reportId}</p>
             </div>
             <div style="text-align:left;">
@@ -4766,18 +4766,28 @@ window.showPublicHazmatCard = (mat, un) => {
     body.innerHTML = '';
     body.style.cssText = 'margin:0;padding:0;background:#060a14;font-family:Arial,sans-serif;min-height:100vh;direction:rtl;';
 
-    const name = mat ? (mat.name || mat.NAME || mat.arabic_name || `مادة UN ${un}`) : `مادة UN ${un}`;
-    const hazClass = mat ? (mat.hazard_class || mat.HAZARD_CLASS || mat.class || '—') : '—';
-    const guide = mat ? (mat.guide || mat.GUIDE || mat.guide_num || '—') : '—';
-    const labels = mat ? (mat.labels || mat.LABELS || '—') : '—';
-    const fireRisk = mat ? (mat.fire || mat.FIRE || mat.fire_hazard || '—') : '—';
-    const healthRisk = mat ? (mat.health || mat.HEALTH || mat.health_hazard || '—') : '—';
-    const reactRisk = mat ? (mat.reactivity || mat.REACTIVITY || '—') : '—';
-    const isolation = mat ? (mat.isolation || mat.ISOLATION || mat.isolation_dist || '—') : '—';
-    const ppe = mat ? (mat.ppe || mat.PPE || mat.protective_equipment || '—') : '—';
-    const firstAid = mat ? (mat.first_aid || mat.FIRST_AID || '—') : '—';
-    const spill = mat ? (mat.spill || mat.SPILL || mat.spill_response || '—') : '—';
-    const fire = mat ? (mat.fire_response || mat.FIRE_RESPONSE || '—') : '—';
+    // أسماء الحقول الصحيحة من قاعدة البيانات
+    const name     = mat ? (mat.name || mat.Name || `مادة UN ${un}`) : `مادة UN ${un}`;
+    const hazClass = mat ? (mat.class || mat.Class || '—') : '—';
+    const guide    = mat ? (mat.guide || mat.Guide || '—') : '—';
+    const formula  = mat ? (mat.formula || '') : '';
+    const ppe      = mat ? (mat.ppe || '—') : '—';
+    const extAgent = mat ? (mat.extinguishingAgent || '—') : '—';
+
+    // حقول مصفوفات
+    const _arr = (v) => Array.isArray(v) ? v.join(' • ') : (typeof v === 'string' ? v : '—');
+    const fireRisk   = mat ? _arr(mat.fire)    : '—';
+    const healthRisk = mat ? _arr(mat.hazards) : '—';
+    const spillResp  = mat ? _arr(mat.spill)   : '—';
+    const handling   = mat ? _arr(mat.handling): '—';
+
+    // مسافات العزل
+    const isoInit  = mat?.isolation?.initial || '—';
+    const isoDay   = mat?.isolation?.day     || '—';
+    const isoNight = mat?.isolation?.night   || '—';
+
+    // الاستخدامات
+    const uses = mat ? (Array.isArray(mat.uses) ? mat.uses : (mat.Usage ? mat.Usage.split('\n') : [])) : [];
 
     body.innerHTML = `
     <div style="max-width:600px;margin:0 auto;padding:1rem;">
@@ -4793,59 +4803,72 @@ window.showPublicHazmatCard = (mat, un) => {
             </div>
         </div>
 
-        <!-- بطاقات المعلومات -->
+        <!-- بطاقات خطر الحريق والمخاطر الصحية -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
             <div style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:1rem;padding:1rem;">
                 <p style="color:rgba(220,38,38,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🔥 خطر الحريق</p>
-                <p style="color:white;font-size:0.875rem;font-weight:700;">${fireRisk}</p>
+                <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${fireRisk}</p>
             </div>
             <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;">
-                <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">☣️ خطر صحي</p>
-                <p style="color:white;font-size:0.875rem;font-weight:700;">${healthRisk}</p>
+                <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">☣️ المخاطر الصحية</p>
+                <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${healthRisk}</p>
             </div>
-            <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:1rem;padding:1rem;">
-                <p style="color:rgba(139,92,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">⚗️ التفاعل</p>
-                <p style="color:white;font-size:0.875rem;font-weight:700;">${reactRisk}</p>
-            </div>
-            <div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:1rem;padding:1rem;">
-                <p style="color:rgba(6,182,212,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">📏 مسافة العزل</p>
-                <p style="color:white;font-size:0.875rem;font-weight:700;">${isolation}</p>
+        </div>
+
+        <!-- مسافات العزل -->
+        <div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(6,182,212,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.75rem;">📏 مسافات العزل</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;text-align:center;">
+                <div style="background:rgba(0,0,0,0.3);border-radius:0.75rem;padding:0.75rem;">
+                    <p style="color:rgba(6,182,212,0.5);font-size:0.55rem;font-weight:900;text-transform:uppercase;margin-bottom:0.25rem;">أولي</p>
+                    <p style="color:#22d3ee;font-size:0.875rem;font-weight:900;">${isoInit}</p>
+                </div>
+                <div style="background:rgba(0,0,0,0.3);border-radius:0.75rem;padding:0.75rem;">
+                    <p style="color:rgba(6,182,212,0.5);font-size:0.55rem;font-weight:900;text-transform:uppercase;margin-bottom:0.25rem;">نهاري</p>
+                    <p style="color:#22d3ee;font-size:0.875rem;font-weight:900;">${isoDay}</p>
+                </div>
+                <div style="background:rgba(0,0,0,0.3);border-radius:0.75rem;padding:0.75rem;">
+                    <p style="color:rgba(6,182,212,0.5);font-size:0.55rem;font-weight:900;text-transform:uppercase;margin-bottom:0.25rem;">ليلي</p>
+                    <p style="color:#22d3ee;font-size:0.875rem;font-weight:900;">${isoNight}</p>
+                </div>
             </div>
         </div>
 
         <!-- معدات الوقاية -->
         <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
             <p style="color:rgba(16,185,129,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🦺 معدات الوقاية الشخصية</p>
-            <p style="color:white;font-size:0.875rem;font-weight:700;">${ppe}</p>
+            <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${ppe}</p>
         </div>
 
-        <!-- الإسعافات الأولية -->
-        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
-            <p style="color:rgba(59,130,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🏥 الإسعافات الأولية</p>
-            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${firstAid}</p>
-        </div>
+        <!-- عامل الإطفاء -->
+        ${extAgent !== '—' ? `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(239,68,68,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🚒 عامل الإطفاء</p>
+            <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${extAgent}</p>
+        </div>` : ''}
 
         <!-- الاستجابة للتسرب -->
-        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+        ${spillResp !== '—' ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
             <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🧹 الاستجابة للتسرب</p>
-            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${spill}</p>
-        </div>
+            <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${spillResp}</p>
+        </div>` : ''}
 
-        <!-- الاستجابة للحريق -->
-        <div style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:1rem;padding:1rem;margin-bottom:1rem;">
-            <p style="color:rgba(220,38,38,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🚒 الاستجابة للحريق</p>
-            <p style="color:white;font-size:0.875rem;font-weight:700;line-height:1.6;">${fire}</p>
-        </div>
+        <!-- التداول والتخزين -->
+        ${handling !== '—' ? `<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(139,92,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">📦 التداول والتخزين</p>
+            <p style="color:white;font-size:0.8rem;font-weight:700;line-height:1.6;">${handling}</p>
+        </div>` : ''}
 
-        <!-- تنبيه + ملصقات -->
-        ${labels !== '—' ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:1rem;padding:1rem;margin-bottom:1rem;text-align:center;">
-            <p style="color:rgba(245,158,11,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.5rem;">🏷️ الملصقات المطلوبة</p>
-            <p style="color:#fbbf24;font-size:0.875rem;font-weight:900;">${labels}</p>
+        <!-- الاستخدامات -->
+        ${uses.length > 0 ? `<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:1rem;padding:1rem;margin-bottom:0.75rem;">
+            <p style="color:rgba(59,130,246,0.6);font-size:0.625rem;text-transform:uppercase;font-weight:900;margin-bottom:0.75rem;">🔬 الاستخدامات الشائعة</p>
+            <ul style="margin:0;padding:0;list-style:none;space-y:0.5rem;">
+                ${uses.slice(0,4).map(u => `<li style="color:rgba(255,255,255,0.8);font-size:0.8rem;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);">✦ ${u.trim()}</li>`).join('')}
+            </ul>
         </div>` : ''}
 
         <!-- تذييل -->
         <div style="text-align:center;padding:1rem;">
-            <p style="color:rgba(255,255,255,0.15);font-size:0.625rem;font-family:monospace;">ERG SYSTEM — الدفاع المدني الأردني — المنطقة الصناعية الجنوبية</p>
+            <p style="color:rgba(255,255,255,0.15);font-size:0.625rem;font-family:monospace;">ERG SYSTEM — الدفاع المدني الأردني</p>
             <p style="color:rgba(220,38,38,0.3);font-size:0.625rem;margin-top:0.25rem;">⚠️ هذه المعلومات للاستخدام الميداني فقط</p>
         </div>
     </div>`;
